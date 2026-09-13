@@ -9,15 +9,20 @@ import org.springframework.web.bind.annotation.PostMapping;
 import shop.admin.Bean.User;
 import shop.admin.mapper.CartMapper;
 import shop.admin.mapper.UserMapper;
+import shop.security.AccessToken;
 import shop.security.JwtCookieSupport;
 import shop.security.JwtUtil;
 import shop.security.LoginUser;
 import shop.security.PasswordService;
+import shop.security.RedisTokenStore;
+import shop.security.RefreshTokenService;
 import shop.shop.tools.StringContainsMultipleTypes;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 @Slf4j
@@ -40,6 +45,14 @@ public class ShopLoginController {
     /** 【Phase 1】把 token 写入 HttpOnly Cookie */
     @Autowired
     JwtCookieSupport jwtCookieSupport;
+
+    /** 【Phase 1 收尾】refresh token 的签发/轮换/吊销（Redis 支撑，可即时撤销） */
+    @Autowired
+    RefreshTokenService refreshTokenService;
+
+    /** 【Phase 1 收尾】access token 黑名单（让无状态 JWT 也能被提前撤销） */
+    @Autowired
+    RedisTokenStore tokenStore;
 
     @GetMapping("/shop/login")
     public String shopLogin(){
@@ -83,11 +96,15 @@ public class ShopLoginController {
             passwordService.logUpgrade(username);
         }
 
-        // ---- 签发 JWT 并写入 HttpOnly Cookie ----
+        // ---- 签发 access token + refresh token，写入 HttpOnly Cookie ----
+        // 短寿命 access（默认 30 分钟，无状态校验，每个请求不查存储）
+        // + 长寿命 refresh（默认 7 天，Redis 可即时吊销）
+        // access 过期后由 JwtAuthenticationFilter 用 refresh 透明续期，用户无感知。
         String role = user.getRole() == null || user.getRole().isBlank()
                 ? LoginUser.ROLE_USER : user.getRole();
-        String token = jwtUtil.generate(new LoginUser(user.getId(), username, role));
-        jwtCookieSupport.writeToken(response, token);
+        LoginUser loginUser = new LoginUser(user.getId(), username, role);
+        jwtCookieSupport.writeAccess(response, jwtUtil.generateAccess(loginUser));
+        jwtCookieSupport.writeRefresh(response, refreshTokenService.issue(loginUser).token());
 
         HttpSession session = request.getSession();
         session.setAttribute("shopusername",username);
@@ -137,17 +154,31 @@ public class ShopLoginController {
     /**
      * 退出登录。
      *
-     * <p>【Phase 1 改造】必须清除 HttpOnly Cookie，否则 JWT 仍然有效
-     * —— 只删 session 属性是删不掉认证凭证的（这正是「退出登录没生效」的典型原因）。
-     *
-     * <p>局限：无状态的 JWT 在过期前本身仍然合法，清除 Cookie 只是让浏览器不再携带它。
-     * 若用户在其他地方拷贝过 token，它依然可用 —— 要彻底解决需引入
-     * <b>token 黑名单（Redis）+ 短期 access token + 长期 refresh token</b>，
-     * 这部分计划在 Phase 1 的后续迭代中补上（Redis 已在运行，可直接接入）。
+     * <p>【Phase 1 收尾】从「只清 Cookie」升级为真正的<b>吊销</b>，三步缺一不可：
+     * <ol>
+     *   <li>删除 Redis 里的 refresh token —— 否则攻击者可以拿它把会话续回来；</li>
+     *   <li>把当前 access token 的 jti 记进黑名单（TTL = 令牌剩余寿命）——
+     *       否则这个「无状态的 JWT」在自然过期前，谁拿到它谁就能用；</li>
+     *   <li>清掉两个 Cookie —— 否则浏览器下次请求还会带着它们。</li>
+     * </ol>
+     * 只做第 3 步是最常见的错误实现：看起来登出了，其实凭证还在有效期内。
      */
     @GetMapping("/shop/exit")
     public String shopExit(HttpServletRequest request, HttpServletResponse response){
-        jwtCookieSupport.clearToken(response);
+        // 1) 作废 refresh token，断掉「自动续期」这条路
+        refreshTokenService.revoke(jwtCookieSupport.readRefreshToken(request));
+        // 2) access token 拉黑：TTL 只留到它自然过期那一刻，黑名单因此不会无限增长
+        String accessToken = jwtCookieSupport.readAccessToken(request);
+        if (accessToken != null) {
+            AccessToken parsed = jwtUtil.parseAccess(accessToken);
+            if (parsed != null) {
+                tokenStore.blacklistAccess(parsed.jti(), Duration.between(Instant.now(), parsed.expiresAt()));
+            }
+        }
+        // 3) 清掉两个 Cookie
+        jwtCookieSupport.clearAccess(response);
+        jwtCookieSupport.clearRefresh(response);
+
         HttpSession session = request.getSession();
         String username = (String) session.getAttribute("shopusername");
         session.removeAttribute("shopusername");
@@ -190,7 +221,11 @@ public class ShopLoginController {
              }else{
                  // 【Phase 1】改密码后统一存 BCrypt
                  userMapper.changePassword(username, passwordService.encode(newpassword));
-                 log.info("用户[{}]修改密码", username);
+                 // 【Phase 1 收尾】改密码后撤销该用户全部 refresh token。
+                 // 这是「密码疑似泄露 → 改密码」场景的关键一步：不撤销的话，
+                 // 攻击者手里的 refresh token 仍能把会话一直续下去，改密码就形同虚设。
+                 int revoked = refreshTokenService.revokeAllForUser(user.getId());
+                 log.info("用户[{}]修改密码，已撤销 {} 个 refresh token", username, revoked);
                  return "redirect:/shop/login";
 
              }

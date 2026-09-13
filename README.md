@@ -18,6 +18,7 @@
 | 认证授权 | Spring Security 6 + JWT（jjwt 0.12.6，HttpOnly Cookie）、BCrypt、RBAC |
 | 视图 | Thymeleaf、原生 JS（jQuery） |
 | 数据库 | MySQL 8 |
+| 缓存 / 会话存储 | Redis 5（Phase 1 收尾接入：access token 黑名单 + refresh token 存储，db 3 + `shop:` 前缀） |
 | 连接池 | HikariCP（Spring Boot 默认；原声明的 Druid 全项目零引用，Phase 1 已移除） |
 | 日志 | SLF4J + Logback（控制台 + 滚动文件 + 错误单独归档） |
 | 校验 | JSR-303 / Hibernate Validator |
@@ -236,7 +237,31 @@ token 会随每次响应轮换，所以**脚本里必须在发请求前现取最
 （`.hermes/verify-phase0.sh` 里的 `json_post()` / `csrf_of()` 就是为此封装的）。
 
 > JWT 配置在 `application.properties` 的 `jwt.*`：`secret`（HS256 要求 ≥ 32 字节，
-> 生产必须用环境变量 `JWT_SECRET` 覆盖）、`expire-minutes`、`cookie-name`、`cookie-secure`。
+> 生产必须用环境变量 `JWT_SECRET` 覆盖）、`expire-minutes`（access，默认 30）、
+> `refresh-expire-days`（默认 7）、`cookie-name` / `refresh-cookie-name`、`cookie-secure`。
+
+### 🔑 令牌语义（改动认证相关代码前必读）
+
+**两个令牌，职责分离，不要混用：**
+
+| | access token | refresh token |
+|---|---|---|
+| 形态 | JWT（无状态，签名自证） | 随机 UUID（Redis 里存着，可即时吊销） |
+| 寿命 | 30 分钟 | 7 天 |
+| Cookie | `ACCESS_TOKEN` | `REFRESH_TOKEN` |
+| 存在哪 | 只在客户端 | Redis `shop:rt:{uuid}` |
+
+- **续期是全自动的**：access 过期后，`JwtAuthenticationFilter` 会用 refresh 换发新的
+  access + refresh 并写回 Cookie，浏览器与前端<b>不需要任何配合</b>。
+  所以不要再往 Controller 里加「token 过期了就跳登录页」这类逻辑。
+- **登出必须三步**：`refreshTokenService.revoke(...)` + `tokenStore.blacklistAccess(jti, 剩余寿命)`
+  + 清两个 Cookie。只清 Cookie 等于没登出（令牌仍在有效期内）。
+- **改密码 / 强制下线**：调用 `refreshTokenService.revokeAllForUser(uid)`，
+  否则攻击者手里的 refresh token 能把会话一直续下去。
+- **Redis 故障会降级而非报错**：`RedisTokenStore` 内部吞掉异常并记 WARN。
+  如果发现「登出后 token 还能用」，先查 Redis 是否可用，再怀疑代码。
+- **不要在业务代码里直接操作 `shop:*` 这些 key**，统一走 `RedisTokenStore`，
+  否则 TTL 与「已用/宽限标记」的约定很容易被破坏（黑名单不设 TTL 会永久堆积）。
 
 ### ⚠️ 视图名不要带前导斜杠
 
@@ -279,11 +304,15 @@ java -jar target/springboot3-1.0-SNAPSHOT.jar --server.port=18080
 **Phase 1 已完成（本阶段）：**
 Spring Boot 2.4.3 → 3.3.5 + `javax`→`jakarta` 全量迁移；Spring Security 6 + JWT（HttpOnly Cookie）
 + RBAC（`ROLE_USER` / `ROLE_ADMIN`）+ BCrypt 密码（存量 MD5 登录时透明升级）；
-CSRF 防护开启并打通表单 / ajax 两条链路；移除 Controller 里用 session 鉴权的脆弱写法。
+CSRF 防护开启并打通表单 / ajax 两条链路；移除 Controller 里用 session 鉴权的脆弱写法；
+**令牌生命周期补齐**：短寿命 access（30 分钟）+ Redis 存储的 refresh（7 天，可即时吊销）、
+登出黑名单、刷新轮换与重放检测（含 60 秒并发宽限）、改密码撤销全部会话。
+
+**Phase 1 仅剩：** 自定义 `oss-spring-boot-starter`（考点 16）。
 
 优先待办：
 
-1. Phase 1 收尾：JWT 黑名单 + refresh token（退出登录后旧 token 在有效期内仍可用，需用 Redis 兜住）
-2. Phase 1 收尾：自定义 `oss-spring-boot-starter`（考点 16，封装文件上传，`@ConditionalOnProperty` 切换本地/OSS）
-3. Phase 2：购物车由逗号字符串重构为关联表，引入库存与乐观锁、订单状态机
+1. Phase 1 收尾：自定义 `oss-spring-boot-starter`（`@ConditionalOnProperty` 切换本地/OSS/MinIO）
+2. Phase 2：购物车由逗号字符串重构为关联表，引入库存与乐观锁、订单状态机
+3. Phase 3：Redis 缓存体系（令牌存储已在用 Redis，缓存可直接叠加）
 4. Phase 4：下单链路补事务与幂等（当前「先查后改」不是原子操作，存在超卖风险）

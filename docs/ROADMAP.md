@@ -15,7 +15,7 @@
 | Phase | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
 | Phase 0 修 bug + 工程化地基 | ✅ 已完成 | 2026-09-13 | 见文末「Phase 0 完成报告」 |
-| Phase 1 Spring Boot 3 + Security + JWT | 🟡 主体完成 | 2026-09-13 | 1.1–1.7 已完成；1.8 自定义 starter、token 黑名单/refresh 待做，见文末「Phase 1 完成报告」 |
+| Phase 1 Spring Boot 3 + Security + JWT | 🟡 收尾中 | 2026-09-13 | 1.1–1.7 + 令牌生命周期（黑名单/refresh/重放检测）已完成；仅剩 1.8 自定义 starter，见文末「Phase 1 完成报告」 |
 | Phase 2 领域建模重构 | ⏳ 待开始 | — | |
 | Phase 3 Redis 缓存体系 | ⏳ 待开始 | — | |
 | Phase 4 高并发秒杀 | ⏳ 待开始 | — | |
@@ -1131,10 +1131,123 @@ PASS=56  FAIL=0
 
 | 遗留项 | 说明 | 处理阶段 |
 |---|---|---|
-| JWT 黑名单 / refresh token | 无状态 token 在过期前始终有效，登出只清 Cookie；需 Redis 黑名单兜住 | Phase 1 收尾（Redis 已在跑） |
-| 自定义 `oss-spring-boot-starter` | 考点 16：`@ConditionalOnProperty` 切换本地/OSS/MinIO | Phase 1 收尾 |
+| 自定义 `oss-spring-boot-starter` | 考点 16：`@ConditionalOnProperty` 切换本地/OSS/MinIO | Phase 1 收尾（最后一项） |
 | `shopusername` 哨兵值「请登录」 | 保留兼容（仅展示层），授权已不依赖它；后续可用统一拦截器彻底替换 | Phase 2 |
 | `role` 字段未在后台界面暴露 | 数据库/实体已就位，管理界面尚未提供改角色入口 | Phase 2 |
 | 上传目录仍在 `src/main/resources` | 运行时写源码目录会被重新编译覆盖 | Phase 1 收尾 / Phase 10 |
 | 验证脚本在 `.hermes/`（未入库） | 沿用 Phase 0 约定（`.hermes/` 已 gitignore），属本地工具链 | — |
+
+---
+
+# Phase 1 收尾 — 令牌生命周期（2026-09-13）
+
+**要解决的问题：** 无状态 JWT 一旦签发，在有效期内<b>无法撤回</b>。
+「登出只清 Cookie」是最常见也最危险的错误实现 —— 看起来登出了，
+但任何人拿着那个 token 还能继续用；密码泄露后改密码也拦不住攻击者手里的旧凭证。
+
+## 交付内容
+
+| 类 | 职责 |
+|---|---|
+| `AccessToken`（record） | 解析结果：身份 + `jti` + 过期时间（后两者是「可撤销」的必要条件） |
+| `JwtUtil`（改） | access token 写入 `jti`；`parseAccess` 返回含 jti/expiry 的完整信息 |
+| `RedisTokenStore` | Redis 上的令牌状态：access 黑名单、refresh 存储、已用/宽限标记、按用户批量撤销；**所有操作带降级** |
+| `RefreshTokenService` | refresh 的签发 / 轮换 / 吊销 / 重放检测 |
+| `JwtCookieSupport`（改） | 双 Cookie（ACCESS_TOKEN + REFRESH_TOKEN）读写与清理 |
+| `JwtAuthenticationFilter`（改） | 先查黑名单；access 不可用时用 refresh <b>透明续期</b>并写回新 Cookie |
+| 登录/登出/改密码（改） | 登录下发双令牌；登出「作废 refresh + 拉黑 access + 清 Cookie」；改密码撤销该用户全部 refresh |
+
+## 关键设计决策（面试可讲）
+
+### 1. 为什么 access 用 JWT，refresh 却用「一串随机 UUID」
+
+两者诉求正好相反，必须分开处理：
+
+| | access token | refresh token |
+|---|---|---|
+| 校验频率 | 每个请求 | 每 30 分钟一次 |
+| 因此需要 | <b>无状态</b>（不查存储，可横向扩展） | <b>可即时吊销</b>（长期凭证，泄露影响大） |
+| 选型 | JWT（签名自证） | 随机串 + Redis 存储 |
+| 代价 | 签发后撤不回 → 用短寿命 + 黑名单兜 | 每 30 分钟查一次 Redis（可接受） |
+
+「既然用了 JWT，为什么服务端还要存东西？」——答案就是：
+**能无状态的部分无状态，做不到无状态的部分（撤销）显式存起来**，
+而不是硬用 JWT 一条路走到黑。
+
+### 2. 黑名单 TTL = 令牌剩余寿命（这是黑名单能不膨胀的关键）
+
+黑名单用 `shop:killed:{jti}`，TTL 精确设为该令牌距离自然过期还剩多久。
+于是「令牌一过期，黑名单条目也自动消失」，**不需要任何清理任务**，也不会无限堆积。
+如果不设 TTL 或设成固定值，要么条目永久残留，要么提前失效放行 —— 两头都是坑。
+
+### 3. refresh 轮换 + 重放检测 + 并发宽限
+
+- **轮换**：每次刷新都换新 refresh token，旧的一次性作废。
+- **重放检测**：旧令牌被再次使用时，正常客户端不会这么做 ⇒ 说明它泄露了 ⇒
+  撤销该用户<b>全部</b> refresh token（宁可让用户重新登录，也不能让攻击者继续用）。
+- **并发宽限（60s）**：但「重复提交」也可能是客户端并发刷新（页面同时发多个请求）。
+  所以轮换时留一个 60 秒宽限窗口，窗口内重复提交返回<b>同一个</b>新令牌，
+  不会把正常用户误判成攻击者踢下线 —— 少了这一步，重放检测会变成「偶发登出」的 bug 源。
+
+### 4. Redis 故障时的降级：宁可撤销失效，不可把用户锁在门外
+
+`RedisTokenStore` 所有方法都 try-catch，异常时记 WARN 并返回「安全默认值」
+（未命中黑名单 / 没有 refresh token）。取舍很明确：
+- 抛异常 ⇒ 「Redis 抖动 → 全站 401」，故障被放大；
+- 降级 ⇒ 抖动期间无法提前撤销令牌、无法续期，用户可能要在 30 分钟后重新登录。
+
+后者是可接受的降级，前者是事故。
+
+## 验证证据（实测）
+
+**单元测试**
+```
+Tests run: 55, Failures: 0, Errors: 0, Skipped: 0    BUILD SUCCESS
+（较上一阶段 +10：新增 JwtUtilTest，覆盖 jti 唯一性、篡改拒绝、密钥轮换失效、
+  过期拒绝、弱密钥启动即失败、有效期换算等边界）
+```
+
+**令牌生命周期端到端（打包 jar + 真实 Redis，38 项断言）**
+```
+PASS=38  FAIL=0
+```
+覆盖：登录下发双令牌（各含 HttpOnly / SameSite / Max-Age）→ Redis 中生成 refresh 记录与用户令牌集合
+→ <b>登出后重放登出前的 access token 被 401 拦下</b>（证明黑名单真的生效）
+→ 旧 refresh token 无法再续期 → access 缺失时浏览器请求仍 200 并<b>透明换发新 ACCESS_TOKEN</b>
+→ refresh 已轮换且旧令牌被标记「已使用」→ 宽限期内重复提交返回同一个新令牌（不误判）
+→ 超出宽限期的重放被拒绝且<b>该用户全部 refresh token 被撤销</b>，日志留下可监控的 WARN 告警。
+
+**回归（确认没打破既有能力）**
+```
+Phase 0 端到端 56 项断言：PASS=56  FAIL=0
+Phase 1 安全面 32 项断言：PASS=32  FAIL=0
+数据完整性：商品 3659 / 用户 30 / 订单 28 / 购物车 29，图片 3665 —— 与基线一致
+```
+
+## 面试可用话术（补充）
+
+> 「无状态 JWT 最大的问题不是性能，是**撤销**：签发出去就收不回来了。
+> 我的做法是 access token 做短（30 分钟）保持无状态，另发一个 refresh token 存在 Redis 里 ——
+> 它是随机串不是 JWT，因为它必须能被即时吊销。
+>
+> 登出要三步一起做：作废 refresh、把 access 的 jti 写进黑名单、清 Cookie。
+> 只清 Cookie 是最常见的错误实现，token 其实还能用。
+> 黑名单的 TTL 我设成『令牌剩余寿命』，所以令牌一过期黑名单条目自动消失，
+> 不需要任何清理任务，也不会无限堆积。
+>
+> refresh 我做了一次性轮换 + 重放检测：旧令牌被再次使用就说明泄露了，
+> 撤销该用户全部会话。但这里有个坑 —— 客户端并发刷新也会重复提交，
+> 所以留了 60 秒宽限窗口，窗口内返回同一个新令牌，避免把正常用户误判成攻击者。
+>
+> 另外 Redis 挂掉时我选择降级而不是抛异常：撤销暂时失效，但不会演变成『缓存抖动导致全站 401』。」
+
+## 本阶段踩的坑（记录）
+
+| 坑 | 现象 | 处理 |
+|---|---|---|
+| `ResponseCookie` 未 `toString()` | 编译期 `ResponseCookie 无法转换为 String` | `addHeader` 需要 String，补 `.toString()`（4 处） |
+| patch 的模糊匹配吃掉相邻行 | changePass 丢了 `return`、logout 丢了 `session` 声明与 `removeAttribute("shopusername")` | 改为精确字符串替换 + 断言「关键语句仍在」；编译/回归分别验证 |
+| `redis-cli --scan` 无输出（本机 5.0.14.1 Windows） | 计数断言恒为 0，且清理 trap 静默失效、db3 残留 key | 测试脚本一律改用 `keys`；redis-cli 输出带 CRLF，用前必须 `tr -d '\r'` |
+| 断言把证据标记算成存活令牌 | `shop:rt:*` 也匹配 `shop:rt:used:*` | 统计存活令牌时排除 `:used:` / `:grace:`，并把剩余 key 打印出来便于核对 |
+
 

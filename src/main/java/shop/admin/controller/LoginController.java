@@ -8,14 +8,19 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import shop.admin.Bean.Admin;
 import shop.admin.mapper.AdminMapper;
+import shop.security.AccessToken;
 import shop.security.JwtCookieSupport;
 import shop.security.JwtUtil;
 import shop.security.LoginUser;
 import shop.security.PasswordService;
+import shop.security.RedisTokenStore;
+import shop.security.RefreshTokenService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Date;
 
 @Slf4j
@@ -33,6 +38,14 @@ public class LoginController {
 
     @Autowired
     JwtCookieSupport jwtCookieSupport;
+
+    /** 【Phase 1 收尾】refresh token 的签发/轮换/吊销 */
+    @Autowired
+    RefreshTokenService refreshTokenService;
+
+    /** 【Phase 1 收尾】access token 黑名单 */
+    @Autowired
+    RedisTokenStore tokenStore;
 
     @GetMapping("/admin/login")
     public String login(HttpServletRequest request, Model m){
@@ -71,9 +84,10 @@ public class LoginController {
             passwordService.logUpgrade("admin:" + adminuser);
         }
 
-        // 签发 ADMIN 角色的 JWT
-        String token = jwtUtil.generate(new LoginUser(admin.getId(), adminuser, LoginUser.ROLE_ADMIN));
-        jwtCookieSupport.writeToken(response, token);
+        // 签发 ADMIN 角色的 access + refresh token（与前台同一套机制，只是角色不同）
+        LoginUser loginUser = new LoginUser(admin.getId(), adminuser, LoginUser.ROLE_ADMIN);
+        jwtCookieSupport.writeAccess(response, jwtUtil.generateAccess(loginUser));
+        jwtCookieSupport.writeRefresh(response, refreshTokenService.issue(loginUser).token());
 
         session.setAttribute("adminuser", adminuser);
         adminMapper.UpdateAdminLoginTime(adminuser, new Date());
@@ -82,10 +96,25 @@ public class LoginController {
         return "redirect:/admin/admin";
     }
 
+    /**
+     * 管理员退出登录。
+     *
+     * <p>【Phase 1 收尾】与前台一致：refresh token 作废 + access token 拉黑 + 清 Cookie，
+     * 三者缺一不可（只清 Cookie 是最常见的错误实现 —— 看起来登出了，凭证其实还有效）。
+     */
     @GetMapping("/admin/logout")
     public String logout(HttpServletRequest request, HttpServletResponse response){
-        // 【Phase 1】必须清 Cookie，否则 JWT 仍然有效（只清 session 属性删不掉凭证）
-        jwtCookieSupport.clearToken(response);
+        refreshTokenService.revoke(jwtCookieSupport.readRefreshToken(request));
+        String accessToken = jwtCookieSupport.readAccessToken(request);
+        if (accessToken != null) {
+            AccessToken parsed = jwtUtil.parseAccess(accessToken);
+            if (parsed != null) {
+                tokenStore.blacklistAccess(parsed.jti(), Duration.between(Instant.now(), parsed.expiresAt()));
+            }
+        }
+        jwtCookieSupport.clearAccess(response);
+        jwtCookieSupport.clearRefresh(response);
+
         HttpSession session = request.getSession();
         String adminuser = (String) session.getAttribute("adminuser");
         session.removeAttribute("adminuser");

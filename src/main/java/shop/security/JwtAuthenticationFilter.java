@@ -8,26 +8,26 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.List;
 
 /**
  * JWT 认证过滤器 —— 整个无状态认证的入口。
  *
- * <p>职责：从请求中取出 token → 校验 → 把身份写入 {@code SecurityContext}。
- * 之后的授权判断（URL 规则、{@code @PreAuthorize}）都基于这个上下文，与 token 本身解耦。
- *
- * <p>取 token 的两种来源，缺一不可：
+ * <p>职责链（按顺序）：
  * <ol>
- *   <li><b>Cookie</b>（浏览器场景）：服务端渲染的页面靠它自动携带；</li>
- *   <li><b>{@code Authorization: Bearer xxx}</b>（接口/移动端场景）：小程序、App、
- *       第三方对接不会用浏览器 Cookie，靠标准头传递。</li>
+ *   <li>从 {@code Authorization: Bearer} 头或 Cookie 取出 access token；</li>
+ *   <li>校验签名与有效期；</li>
+ *   <li><b>查黑名单</b> —— 登出 / 强制下线的令牌在这里被拦下（JWT 本身撤不回，
+ *       靠 jti 黑名单补齐这个能力）；</li>
+ *   <li>access token 不可用时，尝试用 refresh token <b>透明续期</b>：
+ *       换发新的 access + refresh 并写回 Cookie。用户完全无感知，
+ *       不需要前端做任何事，也不需要跳登录页。</li>
  * </ol>
- * 一个过滤器同时支持两种来源，就能让同一套认证服务于 Web 与 API 两类客户端。
  *
- * <p>为什么不抛异常：token 缺失/失效在这里是「常见且正常」的情况（用户没登录、token 过期），
+ * <p>为什么不抛异常：token 缺失/失效在这里是「常见且正常」的情况（用户没登录、令牌过期），
  * 静默放行交给后面的授权过滤器处理即可 —— 由授权层统一决定是 401 还是跳登录页，
  * 避免「认证失败」和「未登录」两条路径产生不一致的响应。
  */
@@ -36,10 +36,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    private final JwtUtil jwtUtil;
+    /** 静态资源不参与透明续期：它们量大、且续期对它们毫无意义（不写 Cookie 更省） */
+    private static final List<String> SKIP_REFRESH_PREFIXES =
+            List.of("/shop/assets/", "/admin/assets/", "/css/", "/js/", "/images/", "/webjars/", "/favicon.ico");
 
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
+    private final JwtUtil jwtUtil;
+    private final JwtCookieSupport cookieSupport;
+    private final RedisTokenStore tokenStore;
+    private final RefreshTokenService refreshTokenService;
+
+    public JwtAuthenticationFilter(JwtUtil jwtUtil,
+                                   JwtCookieSupport cookieSupport,
+                                   RedisTokenStore tokenStore,
+                                   RefreshTokenService refreshTokenService) {
         this.jwtUtil = jwtUtil;
+        this.cookieSupport = cookieSupport;
+        this.tokenStore = tokenStore;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Override
@@ -49,25 +62,49 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // 已经有认证信息（例如同一次请求里被其他机制设置了）就不重复认证
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
-            String token = resolveToken(request);
-            if (token != null) {
-                LoginUser loginUser = jwtUtil.parse(token);
-                if (loginUser != null) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    loginUser, null, loginUser.getAuthorities());
-                    // details 里带上 IP / sessionId 等信息，便于审计与风控
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                }
+            String accessToken = resolveAccessToken(request);
+            AccessToken parsed = (accessToken == null) ? null : jwtUtil.parseAccess(accessToken);
+
+            if (parsed != null && !tokenStore.isAccessBlacklisted(parsed.jti())) {
+                authenticate(parsed.user(), request);
+            } else {
+                // access token 缺失 / 过期 / 已被拉黑 → 尝试用 refresh token 续期
+                tryRefresh(request, response);
             }
         }
 
         filterChain.doFilter(request, response);
     }
 
+    /** 用 refresh token 换新令牌并写回 Cookie；失败则静默保持匿名。 */
+    private void tryRefresh(HttpServletRequest request, HttpServletResponse response) {
+        String uri = request.getRequestURI();
+        for (String prefix : SKIP_REFRESH_PREFIXES) {
+            if (uri.startsWith(prefix)) {
+                return;
+            }
+        }
+        String refreshToken = cookieSupport.readRefreshToken(request);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return;
+        }
+        refreshTokenService.rotate(refreshToken).ifPresent(issued -> {
+            cookieSupport.writeAccess(response, jwtUtil.generateAccess(issued.user()));
+            cookieSupport.writeRefresh(response, issued.token());
+            authenticate(issued.user(), request);
+        });
+    }
+
+    private void authenticate(LoginUser loginUser, HttpServletRequest request) {
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
+        // details 里带上 IP / sessionId 等信息，便于审计与风控
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
     /** 优先取标准请求头（API 客户端），其次取 Cookie（浏览器）。 */
-    private String resolveToken(HttpServletRequest request) {
+    private String resolveAccessToken(HttpServletRequest request) {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith(BEARER_PREFIX)) {
             String token = header.substring(BEARER_PREFIX.length()).trim();
@@ -75,15 +112,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return token;
             }
         }
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            String cookieName = jwtUtil.getCookieName();
-            for (Cookie cookie : cookies) {
-                if (cookieName.equals(cookie.getName())) {
-                    return cookie.getValue();
-                }
-            }
-        }
-        return null;
+        return cookieSupport.readAccessToken(request);
     }
 }

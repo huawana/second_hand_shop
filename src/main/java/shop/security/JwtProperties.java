@@ -19,11 +19,17 @@ public class JwtProperties {
     /** 签名密钥。HS256 要求至少 256 bit（32 字节），生产必须用环境变量 JWT_SECRET 覆盖。 */
     private String secret;
 
-    /** token 有效期（分钟）。 */
-    private long expireMinutes = 1440;
+    /** access token 有效期（分钟）。短寿命 + refresh token 是无状态认证的标准搭配。 */
+    private long expireMinutes = 30;
 
-    /** 承载 token 的 Cookie 名。 */
+    /** refresh token 有效期（天）。 */
+    private long refreshExpireDays = 7;
+
+    /** 承载 access token 的 Cookie 名。 */
     private String cookieName = "ACCESS_TOKEN";
+
+    /** 承载 refresh token 的 Cookie 名。 */
+    private String refreshCookieName = "REFRESH_TOKEN";
 
     /** Cookie 是否只在 HTTPS 下发送（本地开发为 false）。 */
     private boolean cookieSecure = false;
@@ -44,12 +50,28 @@ public class JwtProperties {
         this.expireMinutes = expireMinutes;
     }
 
+    public long getRefreshExpireDays() {
+        return refreshExpireDays;
+    }
+
+    public void setRefreshExpireDays(long refreshExpireDays) {
+        this.refreshExpireDays = refreshExpireDays;
+    }
+
     public String getCookieName() {
         return cookieName;
     }
 
     public void setCookieName(String cookieName) {
         this.cookieName = cookieName;
+    }
+
+    public String getRefreshCookieName() {
+        return refreshCookieName;
+    }
+
+    public void setRefreshCookieName(String refreshCookieName) {
+        this.refreshCookieName = refreshCookieName;
     }
 
     public boolean isCookieSecure() {
