@@ -16,8 +16,25 @@
         (select o.id AS id,p.`name` AS productName,u.username AS buyerName,o.created_at AS createdAt,o.`condition` AS `condition` from lxy_order o join lxy_product p join lxy_user u where o.buy_uid=u.id and o.product_id=p.id) b WHERE s.id=b.id
 
     </select>
+    <!--
+      【修复】原 SQL 是 "select * from lxy_order where product_id = #{id}"，
+      Order 实体里的 sellerName / buyerName / productName 三个字段没有任何来源 → 恒为 null。
+      后果有两个：buySuccess 页面上卖家/买家信息是空白；ShopTransactionController
+      新增的越权校验（比对 username 与 sellerName/buyerName）永远不通过。
+      这里补上三次 JOIN 把名称真正查出来。
+    -->
     <select id="getOrderByProductId" resultType="shop.admin.Bean.Order">
-        select * from lxy_order where product_id = #{id}
+        select o.id            as id,
+               p.name          as productName,
+               s.username      as sellerName,
+               b.username      as buyerName,
+               o.created_at    as createdAt,
+               o.`condition`   as `condition`
+        from lxy_order o
+                 left join lxy_product p on p.id = o.product_id
+                 left join lxy_user s on s.id = o.sell_uid
+                 left join lxy_user b on b.id = o.buy_uid
+        where o.product_id = #{id}
     </select>
     <select id="getOrderById" resultType="shop.admin.Bean.Order">
         select * from lxy_order where id=#{id}

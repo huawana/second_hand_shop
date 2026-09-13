@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logback 日志配置。
+
+  改造前：全项目 18 处 System.out.println + 5 处 e.printStackTrace()。
+  问题：
+    1. 无法按级别过滤 —— logback 的 WARN/INFO/DEBUG 分级在这里完全失效
+    2. 没有时间戳、线程名、类名 —— 出问题无法定位是哪个请求的哪次调用
+    3. 没有落盘 —— 控制台一关日志就没了，线上排障无据可查
+    4. printStackTrace 绕过日志系统 —— 生产环境的日志采集/告警链路收不到
+
+  改造后：控制台（彩色、便于开发）+ 文件（滚动归档、便于线上排障）双输出。
+  接口文档/面试可讲：日志级别怎么定、异步 Appender 为什么要用、日志滚动策略怎么配。
+-->
+<configuration>
+
+    <!-- 从 application.properties 读取应用名，日志文件名里带上，便于多环境区分 -->
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="second-hand-shop"/>
+
+    <!-- 日志格式：时间 | 级别 | 线程 | 类名 | 消息 -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 全量日志文件：按天 + 按大小滚动，保留 30 天，上限 1GB -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/${APP_NAME}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/${APP_NAME}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 错误日志单独落一份：线上出问题时直接看这个文件，不用在全量日志里捞 -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/${APP_NAME}-error.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>60</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 开发期把本项目的日志开到 DEBUG，便于看 SQL 与业务流转；
+         第三方框架保持 INFO，避免刷屏（MyBatis 的 SQL 日志单独用 DEBUG 打开）。 -->
+    <logger name="shop" level="DEBUG"/>
+    <logger name="shop.admin.mapper" level="DEBUG"/>
+    <logger name="shop.shop.mapper" level="DEBUG"/>
+
+    <!-- 生产环境可把根级别调到 WARN 以减少 IO，这里保持 INFO -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </root>
+
+</configuration>

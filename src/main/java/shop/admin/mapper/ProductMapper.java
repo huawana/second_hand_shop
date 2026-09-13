@@ -25,9 +25,14 @@ public interface ProductMapper {
 
     void updateProduct(@Param("name") String name, @Param("description") String description, @Param("price") double price, @Param("img_store_path") String img_store_path);
 
-    int getNowId();
+    /**
+     * 【调整】返回类型由 int 改为 Integer。
+     * 原返回类型在「查询无结果」时需要把 null 拆箱成 int，会抛 NullPointerException，
+     * 把「表里还没有商品」这种正常状态伪装成了系统崩溃。
+     */
+    Integer getNowId();
 
-    int getIdByImgPath(@Param("imgPath") String imgPath);
+    Integer getIdByImgPath(@Param("imgPath") String imgPath);
 
     void updateProductViewCount(@Param("id") int id, @Param("viewCount") int viewCount);
 

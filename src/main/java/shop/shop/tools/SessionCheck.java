@@ -16,7 +16,11 @@ public class SessionCheck {
     }
 
     public static void checkSessionSchool(HttpSession session, Model m){
-        if (session.getAttribute("school") != "null") {
+        // 【Bug 修复】原为 session.getAttribute("school") != "null"：
+        // 这是拿 Object 与字符串字面量比较「引用」，两者永远不相等 → 条件恒为 true，
+        // 下面的 else 分支其实是死代码。这里的意图显然是判空，改为标准写法。
+        // （面试可讲：== / != 比较引用，字符串内容相等必须用 equals）
+        if (session.getAttribute("school") != null) {
             m.addAttribute("school", session.getAttribute("school"));
         } else {
             m.addAttribute("school", "空");
@@ -25,7 +29,8 @@ public class SessionCheck {
 
 
     public static void checkSessionPosition(HttpSession session, Model m){
-        if(session.getAttribute("province")!="null"){
+        // 【Bug 修复】同上：!= "null" 恒为 true，else 分支是死代码
+        if(session.getAttribute("province")!=null){
             m.addAttribute("province",session.getAttribute("province"));
             m.addAttribute("city",session.getAttribute("city"));
             m.addAttribute("area",session.getAttribute("area"));

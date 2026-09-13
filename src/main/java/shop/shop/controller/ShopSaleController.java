@@ -1,5 +1,6 @@
 package shop.shop.controller;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
@@ -20,12 +21,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 
+@Slf4j
 @Controller
 public class ShopSaleController {
 
@@ -33,39 +30,46 @@ public class ShopSaleController {
     ProductMapper productMapper;
     @Autowired
     UserMapper userMapper;
+
     @Value("${upload.path}") // 从配置文件中获取上传路径
     private String uploadPath;
+
     @PostMapping("/shop/uploadProduct")
     public String uploadProduct(HttpServletRequest request, Model m, @RequestParam("image") MultipartFile image, @RequestParam("name") String name, @RequestParam("price") double price, @RequestParam("description") String description){
         HttpSession session = request.getSession();
-        System.out.println(1111);
         if (SessionCheck.checkSessionName(session)) {
             return "redirect:/shop/login";
         }
         if(price <= 0){
-            System.out.println(2222);
             session.setAttribute("saleError","商品价格必须大于0");
             return "redirect:/shop/sale";
         }
-        System.out.println(3333);
+        if(image == null || image.isEmpty()){
+            // 与价格校验保持一致：这是用户输入问题，应该回到页面提示，而不是抛异常
+            session.setAttribute("saleError","必须上传商品图片");
+            return "redirect:/shop/sale";
+        }
         String username = (String)session.getAttribute("shopusername");
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
         int uid = userMapper.getIdByUserName(username);
-        int nowId = productMapper.getNowId();
-        String fileName = String.valueOf(nowId + 1) + ".png";
-        System.out.println(fileName);
+        // 【Bug 修复】getNowId() 在商品表为空时返回 null，原代码直接拆箱会 NPE。
+        // 【已知缺陷】用「当前最大 id + 1」当文件名是典型的 ID 生成竞态：
+        //   (a) 并发上传会拿到同一个文件名并互相覆盖
+        //   (b) 若删过商品，maxId+1 与自增主键会不一致
+        // 这两点正好是 Phase 6「分布式 ID」章节的引入案例。
+        Integer nowId = productMapper.getNowId();
+        String fileName = String.valueOf(nowId == null ? 1 : nowId + 1) + ".png";
         String filePath = uploadPath + fileName;
-        System.out.println(filePath);
         ProductPictureProcess.saveFile(username,image,filePath);
         productMapper.uploadProduct(name,uid,description,price,"/shop/assets/product-img/"+fileName);
+        log.info("用户[{}]发布商品 name={} price={} file={}", username, name, price, fileName);
         return "redirect:/shop/index";
 
     }
     @GetMapping("/shop/changeProductInformation/{id}")
     public String changeProductInformation(@PathVariable int id,HttpServletRequest request, Model m){
-        System.out.println(6666);
         HttpSession session = request.getSession();
         if (SessionCheck.checkSessionName(session)) {
             return "redirect:/shop/login";
@@ -79,8 +83,12 @@ public class ShopSaleController {
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
         Product product = productMapper.getProductById(id);
+        if (product == null) {
+            return "redirect:/shop/personRelease";
+        }
         String sellerName = product.getSellerName();
         if(!sellerName.equals(username)){
+            // 越权保护：不是自己的商品不能编辑
             return "redirect:/shop/index";
         }else{
             m.addAttribute("product",product);
@@ -98,21 +106,42 @@ public class ShopSaleController {
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
-        if(image == null || image.isEmpty()){
-            String imgPath = productMapper.getProductById(id).getImgPath();
-            productMapper.updateProduct(name,description,price,imgPath);
-        }else{
-            Product product = productMapper.getProductById(id);
-            String imgPath = product.getImgPath();
-            File file = new File(imgPath);
-            file.delete();
-            // 在这里处理接收到的数据
-            // 例如：保存图片文件路径、创建商品对象等
-            int uid = userMapper.getIdByUserName(username);
-            String filePath = uploadPath + id + ".png";
-            ProductPictureProcess.saveFile(username,image,filePath);
-            productMapper.updateProduct(name,description,price,imgPath);
+        if(price <= 0){
+            session.setAttribute("saleError","商品价格必须大于0");
+            return "redirect:/shop/changeProductInformation/" + id;
         }
+        // 越权保护：只能修改自己发布的商品，否则任何人都能改他人商品的价格
+        Product origin = productMapper.getProductById(id);
+        if (origin == null) {
+            return "redirect:/shop/personRelease";
+        }
+        if (!username.equals(origin.getSellerName())) {
+            return "redirect:/shop/index";
+        }
+        if(image == null || image.isEmpty()){
+            // 未上传新图片：沿用原图路径
+            productMapper.updateProduct(name,description,price,origin.getImgPath());
+        }else{
+            // 【Bug 修复】原代码 new File(imgPath) 直接把 URL 当磁盘路径用。
+            // imgPath 形如 "/shop/assets/product-img/123.png"，会被解析成「当前工作目录下的
+            // shop/assets/...」→ 根本指向不到真实文件，delete() 恒失败，旧图永久残留在磁盘。
+            // 正确做法：从 URL 里取出文件名，再拼上传目录。
+            String imgPath = origin.getImgPath();
+            String oldFileName = imgPath.substring(imgPath.lastIndexOf('/') + 1);
+            File oldFile = new File(uploadPath + oldFileName);
+            if (oldFile.exists() && !oldFile.delete()) {
+                log.warn("旧图片删除失败: {}", oldFile.getAbsolutePath());
+            }
+
+            // 【Bug 修复】原代码把新图存成 "{id}.png"，但写回数据库时用的仍是旧的 imgPath，
+            // 一旦旧文件名与 id 不对应，就会出现「库里有路径、磁盘没文件」的坏数据。
+            // 这里统一：文件名 = {id}.png，并把同一个值写回数据库。
+            String newFileName = String.valueOf(id) + ".png";
+            ProductPictureProcess.saveFile(username,image,uploadPath + newFileName);
+            productMapper.updateProduct(name,description,price,
+                    "/shop/assets/product-img/" + newFileName);
+        }
+        log.info("用户[{}]修改商品 id={} name={} price={}", username, id, name, price);
         return "redirect:/shop/personRelease";
 
     }

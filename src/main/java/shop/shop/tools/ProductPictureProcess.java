@@ -1,55 +1,46 @@
 package shop.shop.tools;
 
-import org.apache.tomcat.jni.File;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.multipart.MultipartFile;
-import shop.admin.mapper.CartMapper;
-import shop.admin.mapper.ProductMapper;
-import shop.admin.mapper.UserMapper;
-import shop.shop.mapper.SearchMapper;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
-@Component
+/**
+ * 商品图片落盘工具。
+ *
+ * <p>【清理】原类里注入了 4 个 Mapper（CartMapper/ProductMapper/SearchMapper/UserMapper）
+ * 却一个都没用到 —— 典型的「为了使用 @Autowired 而使用」，且用静态字段接收实例依赖，
+ * 这类写法在容器重启/多实例场景下会串数据。既然方法都是静态的，直接做成静态工具类。
+ */
+@Slf4j
 public class ProductPictureProcess {
-    static CartMapper cartMapper;
-    static ProductMapper productMapper;
-    static SearchMapper searchMapper;
-    static UserMapper userMapper;
-    @Autowired
-    public ProductPictureProcess(CartMapper cartMapper,ProductMapper productMapper,SearchMapper searchMapper,UserMapper userMapper) {
-        this.cartMapper = cartMapper;
-        this.productMapper = productMapper;
-        this.searchMapper = searchMapper;
-        this.userMapper = userMapper;
+
+    private ProductPictureProcess() {
+        // 工具类禁止实例化
     }
-    private static final Logger logger = LoggerFactory.getLogger(ProductPictureProcess.class);
 
     public static void saveFile(String username, MultipartFile image, String filePath) {
-
-
         if (image == null || image.isEmpty()) {
             throw new IllegalArgumentException("上传的图片不能为空");
         }
-
-        // 构造保存文件的完整路径，这里假设你想在路径中包含用户名
         Path path = Paths.get(filePath);
-        System.out.println(filePath);
-        System.out.println(path);
         try {
-            // 保存文件到指定路径
+            // 【修复】原代码直接 Files.copy，若上传目录不存在会抛 NoSuchFileException。
+            // 首次部署到新机器（upload.path 指向的目录还没建）必然踩到，这里补上建目录。
+            Path parent = path.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
             Files.copy(image.getInputStream(), path, StandardCopyOption.REPLACE_EXISTING);
+            log.info("用户[{}]上传图片 -> {}", username, path.toAbsolutePath());
         } catch (IOException e) {
-            throw new RuntimeException("保存文件时发生错误", e);
+            // 【修复】原代码把原始异常整个丢弃（只 new 了一个 RuntimeException），
+            // 排障时完全不知道根因是磁盘满、权限不足还是路径非法。这里必须带上 cause。
+            throw new RuntimeException("保存文件时发生错误: " + path.toAbsolutePath(), e);
         }
     }
 

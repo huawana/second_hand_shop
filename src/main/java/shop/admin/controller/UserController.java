@@ -1,5 +1,6 @@
 package shop.admin.controller;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -14,6 +15,7 @@ import java.sql.Date;
 import java.util.List;
 import java.util.Objects;
 
+@Slf4j
 @Controller
 public class UserController {
     @Autowired
@@ -36,10 +38,11 @@ public class UserController {
             try{
                 String encodedPassword = MD5passEncryption.encrypt(password);
                 userMapper.addUser(username,encodedPassword,email,phone);
+                log.info("管理员[{}]新增用户 {}", session.getAttribute("adminuser"), username);
                 m.addAttribute("result","添加用户成功");
             } catch (Exception e) {
+                log.error("添加用户失败 username={}", username, e);
                 m.addAttribute("result","添加用户失败");
-                e.printStackTrace();
             }
         }else {
             m.addAttribute("result","两次密码不一致");
@@ -78,9 +81,10 @@ public class UserController {
         }
         try {
             userMapper.deleteUser(id);
+            log.info("管理员[{}]删除用户 id={}", session.getAttribute("adminuser"), id);
             m.addAttribute("result","删除用户成功");
         }catch (Exception e){
-            e.printStackTrace();
+            log.error("删除用户失败 id={}", id, e);
             m.addAttribute("result","删除用户失败");
         }
         return "redirect:/admin/user";

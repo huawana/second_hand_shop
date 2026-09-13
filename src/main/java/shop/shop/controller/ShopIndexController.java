@@ -162,7 +162,6 @@ public class ShopIndexController {
             return "redirect:/shop/login";
         }
         if(session.getAttribute("saleError")=="商品价格必须大于0"){
-            System.out.println();
             m.addAttribute("saleError","商品价格必须大于0");
             session.removeAttribute("saleError");
         }

@@ -1,5 +1,6 @@
 package shop.shop.tools;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import shop.admin.Bean.Cart;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+@Slf4j
 @Component
 public class UserProcess {
 
@@ -37,7 +39,7 @@ public class UserProcess {
             List<Integer> listCart = StringToList.stringToList(stringCart);
             if (listCart.contains(id)) {
                 listCart.remove(Integer.valueOf(id)); // 使用 Integer.valueOf() 将 id 转换为 Integer 类型
-                System.out.println(listCart);
+                log.debug("从用户[{}]的购物车中移除商品 {}", cart.getId(), id);
             }
             String newCart = StringToList.listToString(listCart);
             cartMapper.updateCartProducts(cart.getId(), newCart);

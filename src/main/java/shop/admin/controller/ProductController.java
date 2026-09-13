@@ -1,5 +1,6 @@
 package shop.admin.controller;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
@@ -19,6 +20,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.List;
 
+@Slf4j
 @Controller
 public class ProductController {
     @Autowired
@@ -86,9 +88,10 @@ public class ProductController {
                 ProductPictureProcess.saveFile(sellerUsername, image, uploadPath + fileName);
                 productMapper.uploadProduct(name, seller.getId(), description, price,
                         "/shop/assets/product-img/" + fileName);
+                log.info("管理员新增商品 name={} seller={} file={}", name, sellerUsername, fileName);
                 m.addAttribute("result", "添加商品成功");
             } catch (Exception e) {
-                e.printStackTrace();
+                log.error("添加商品失败 name={} seller={}", name, sellerUsername, e);
                 m.addAttribute("result", "添加商品失败：" + e.getMessage());
             }
         }
@@ -103,10 +106,11 @@ public class ProductController {
         }
         try{
             productMapper.deleteProduct(id);
+            log.info("管理员删除商品 id={}", id);
             m.addAttribute("result","删除商品成功");
             return "redirect:/admin/product";
         }catch (Exception e){
-            e.printStackTrace();
+            log.error("删除商品失败 id={}", id, e);
             m.addAttribute("result","删除商品失败");
             return "redirect:/admin/product";
         }
