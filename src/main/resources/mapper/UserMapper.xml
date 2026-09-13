@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.admin.mapper.UserMapper">
+    <update id="updateUserByUserName">
+        update lxy_user set name=#{name}, age=#{age}, email=#{email}, phone=#{phone} where username=#{username}
+    </update>
+    <update id="updateUserLocationByUserName">
+        update lxy_user set province=#{province}, city=#{city}, area=#{area} where username=#{username}
+    </update>
+    <update id="updateUserSchoolByUserName">
+        update lxy_user set school=#{school} where username=#{username}
+    </update>
+    <update id="changePassword">
+        update lxy_user set password=#{password} where username=#{username}
+    </update>
+    <delete id="deleteUser">
+        delete from lxy_user where id=#{id}
+    </delete>
+    <select id="getUserById" resultType="shop.admin.Bean.User">
+        select * from lxy_user where id=#{id}
+    </select>
+    <select id="getUsers" resultType="shop.admin.Bean.User">
+        select * from lxy_user
+    </select>
+    <select id="getUserByUsername" resultType="shop.admin.Bean.User">
+        select * from lxy_user where username=#{username}
+    </select>
+    <select id="getIdByUserName" resultType="java.lang.Integer">
+        select id from lxy_user where username=#{username}
+    </select>
+    <insert id="addUser" parameterType="shop.admin.Bean.User">
+        INSERT INTO lxy_user (username,password,email,phone,created_at)
+        VALUES(#{username}, #{password},#{email},#{phone},NOW())
+    </insert>
+</mapper>

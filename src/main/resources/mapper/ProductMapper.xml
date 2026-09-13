@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.admin.mapper.ProductMapper">
+    <insert id="uploadProduct">
+        insert into lxy_product(name,uid,description,price,created_at,img_store_path) values(#{name},#{uid},#{description},#{price},NOW(),#{img_store_path})
+    </insert>
+    <insert id="updateProduct">
+        update lxy_product set name=#{name},description=#{description},price=#{price} where img_store_path=#{img_store_path}
+    </insert>
+
+    <update id="updateProductViewCount">
+        update lxy_product set view_count = #{viewCount} where id = #{id}
+    </update>
+    <update id="updateSellTimeById">
+        update lxy_product set sold_time = NOW() where id = #{id}
+    </update>
+    <update id="undoSellTimeById">
+        update lxy_product set sold_time = null where id = #{id}
+    </update>
+    <select id="getProducts" resultType="shop.admin.Bean.Product">
+        select p.id,p.name,u.username as sellerName,p.description,p.price,p.created_at as createdAt,p.img_store_path as imgPath,p.view_count as viewCount from lxy_product p join lxy_user u on p.uid=u.id where p.sold_time is null and u.username!=#{username}
+    </select>
+    <select id="getProductsByLocation" resultType="shop.admin.Bean.Product">
+        select p.id,p.name,u.username as sellerName,p.description,p.price,p.created_at as createdAt,p.img_store_path as imgPath from lxy_product p join lxy_user u on p.uid=u.id where u.province=#{province} and u.city=#{city} and u.area=#{area} and p.sold_time is null
+    </select>
+    <select id="getProductsBySchool" resultType="shop.admin.Bean.Product">
+        select p.id,p.name,u.username as sellerName,p.description,p.price,p.created_at as createdAt,p.img_store_path as imgPath from lxy_product p join lxy_user u on p.uid=u.id where u.school=#{school} and p.sold_time is null
+    </select>
+    <select id="getProductBySearch" resultType="shop.admin.Bean.Product">
+        SELECT p.id,p.`name`,u.username as sellerName,p.`description`,p.price,p.created_at AS createdAt,p.img_store_path as imgPath,p.view_count as viewCount FROM lxy_product p JOIN lxy_user u on p.uid=u.id where p.`name` LIKE #{query} and u.username!=#{username} and p.sold_time is null
+    </select>
+    <select id="getProductById" resultType="shop.admin.Bean.Product">
+        select p.id,p.name,u.username as sellerName,p.description,p.price,p.created_at as createdAt,p.img_store_path as imgPath,p.view_count as viewCount from lxy_product p join lxy_user u on p.uid=u.id where p.id=#{id}
+    </select>
+    <select id="getNowId" resultType="java.lang.Integer">
+        select id from lxy_product ORDER BY id DESC limit 0,1
+    </select>
+    <select id="getIdByImgPath" resultType="java.lang.Integer">
+        select id from lxy_product where img_store_path = #{imgPath}
+    </select>
+    <select id="getProductsByUid" resultType="shop.admin.Bean.Product">
+        select p.id,p.name,p.price,p.description,p.created_at as createdAt,p.img_store_path as imgPath from lxy_product p join lxy_user u on u.id = p.uid where p.uid = #{uid} and p.sold_time is null;
+    </select>
+    <select id="getSoldProductByUsername" resultType="shop.admin.Bean.Product">
+        SELECT u.username,m.name,m.price,m.description,m.createdAt,m.imgPath,m.`condition` AS `status`,m.soldTime FROM (SELECT o.product_id,o.sell_uid,o.buy_uid,p.uid,p.id,p.name,p.price,p.description,p.created_at AS createdAt,o.`condition`,p.sold_time as soldTime,p.img_store_path as imgPath from lxy_product p right join lxy_order o on o.product_id = p.id where o.`condition`!="订单已完成")  AS m LEFT JOIN lxy_user u ON m.uid = u.id where username = #{username}
+    </select>
+    <select id="getBoughtProductByUsername" resultType="shop.admin.Bean.Product">
+        SELECT u.username,m.name,m.price,m.description,m.createdAt,m.imgPath,m.`condition` AS `status`,m.soldTime FROM (SELECT o.product_id,o.sell_uid,o.buy_uid,p.uid,p.id,p.name,p.price,p.description,p.created_at AS createdAt,o.`condition`,p.sold_time as soldTime,p.img_store_path as imgPath from lxy_product p right join lxy_order o on o.product_id = p.id where o.`condition`!="订单已完成")  AS m LEFT JOIN lxy_user u ON m.buy_uid = u.id where username = #{username}
+    </select>
+    <select id="getFinishBuyProductByUsername" resultType="shop.admin.Bean.Product">
+        SELECT u.username,m.name,m.price,m.description,m.createdAt,m.imgPath,m.`condition` AS `status`,m.soldTime FROM (SELECT o.product_id,o.sell_uid,o.buy_uid,p.uid,p.id,p.name,p.price,p.description,p.created_at AS createdAt,o.`condition`,p.sold_time as soldTime,p.img_store_path as imgPath from lxy_product p right join lxy_order o on o.product_id = p.id where o.`condition`="订单已完成")  AS m LEFT JOIN lxy_user u ON m.buy_uid = u.id where username = #{username}
+    </select>
+    <select id="getFinishSellProductByUsername" resultType="shop.admin.Bean.Product">
+        SELECT u.username,m.name,m.price,m.description,m.createdAt,m.imgPath,m.`condition` AS `status`,m.soldTime FROM (SELECT o.product_id,o.sell_uid,o.buy_uid,p.uid,p.id,p.name,p.price,p.description,p.created_at AS createdAt,o.`condition`,p.sold_time as soldTime,p.img_store_path as imgPath from lxy_product p right join lxy_order o on o.product_id = p.id where o.`condition`="订单已完成")  AS m LEFT JOIN lxy_user u ON m.uid = u.id where username = #{username}
+    </select>
+    <delete id="deleteProduct">
+        delete from lxy_product where id=#{id}
+    </delete>
+</mapper>

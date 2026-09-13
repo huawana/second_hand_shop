@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>登录 | 二手交易平台</title>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" type="text/css" href="/shop/assets/css/signup.css">
+  <link rel="stylesheet" type="text/css" href="/shop/assets/css/header.css">
+
+</head>
+<body>
+<header>
+  <div class="head">
+    <div class="logo">
+      <img src="/shop/assets/HTML-img/logo.png" alt="">
+    </div>
+    <div class="position">
+      <img src="/shop/assets/HTML-img/location.png" alt="">
+    </div>
+    <ul class="navigation">
+      <li><a href="/shop/index">首页</a></li>
+      <li><a href="/shop/index/sortedByTime">最近发布</a></li>
+      <li><a href="/shop/index/chosenByLocation">同城优选</a></li>
+      <li><a href="/shop/index/chosenBySchool">校内交易</a></li>
+      <li><a href="/shop/sale">发布商品</a></li>
+
+    </ul>
+    <ul class="person">
+      <li>
+        <a href="/shop/person">
+          <img id="user-img" src="/shop/assets/HTML-img/user1.png" alt="">
+        </a>
+      </li>
+      <li>
+        <a href="/shop/cart">
+          <img id="cart-img" src="/shop/assets/HTML-img/cart1.png" alt="">
+        </a>
+      </li>
+      <li>
+        <a href="/shop/exit">
+          <img id="exit-img" src="/shop/assets/HTML-img/exit.png" alt="">
+        </a>
+      </li>
+    </ul>
+  </div>
+
+</header>
+<div class="login-container">
+  <h1>注册</h1>
+  <h3 th:text="${signUpMistake}"></h3>
+  <form action="/shop/signup" method="post">
+    <input type="text" placeholder="用户名（8位以下）" name="username">
+    <input type="password" placeholder="密码（8到16位，至少包括两种字符）" name="password">
+    <input type="password" placeholder="确认密码" name="confirmpassword">
+    <button type="submit">注册</button>
+  </form>
+</div>
+</body>
+</html>

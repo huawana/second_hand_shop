@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.admin.mapper.AdminMapper">
+    <update id="UpdateAdminPassword">
+        update lxy_admin set adminpass=#{adminpass} where adminuser=#{adminuser}
+    </update>
+    <update id="UpdateAdminLoginTime">
+        update lxy_admin set login_at=#{loginTime} where adminuser=#{adminuser}
+    </update>
+    <select id="getAdmins" resultType="shop.admin.Bean.Admin">
+        select * from lxy_admin
+    </select>
+    <select id="getAdmin" resultType="shop.admin.Bean.Admin">
+        select * from lxy_admin where adminuser=#{adminuser}
+    </select>
+</mapper>

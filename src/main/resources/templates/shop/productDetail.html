@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<link rel="stylesheet" href="/shop/assets/css/productDetail.css">
+<link rel="stylesheet" href="/shop/assets/css/header.css">
+<link rel="stylesheet" href="/shop/assets/css/common.css">
+<body>
+<header>
+    <div class="logo">
+        <img src="/shop/assets/HTML-img/logo.png" alt="">
+    </div>
+    <div class="position">
+        <a href="/shop/city"><img src="/shop/assets/HTML-img/location.png" alt=""></a>
+        <ul>
+            <li th:text="${province}"></li>
+            <li th:text="${city}"></li>
+            <li th:text="${area}"></li>
+        </ul>
+    </div>
+    <div class="school">
+        <a href="/shop/school"><img src="/shop/assets/HTML-img/school.png" alt=""></a>
+        <ul>
+            <li th:text="${school}"></li>
+        </ul>
+    </div>
+    <ul class="navigation">
+        <li><a href="/shop/index">首页</a></li>
+        <li><a href="/shop/index/sortedByTime">最近发布</a></li>
+        <li><a href="/shop/index/chosenByLocation">同城优选</a></li>
+        <li><a href="/shop/index/chosenBySchool">校内交易</a></li>
+        <li><a href="/shop/sale">发布商品</a></li>
+    </ul>
+    <ul class="person">
+        <li>
+            <a href="/shop/person">
+                <img id="user-img" src="/shop/assets/HTML-img/user1.png" alt="">
+            </a>
+        </li>
+        <li>
+            <p th:text="'您好！' + ${shopusername}"></p>
+        </li>
+        <li>
+            <a href="/shop/cart">
+                <img id="cart-img" src="/shop/assets/HTML-img/cart1.png" alt="">
+            </a>
+        </li>
+        <li>
+            <a href="/shop/exit">
+                <img id="exit-img" src="/shop/assets/HTML-img/exit.png" alt="">
+            </a>
+        </li>
+    </ul>
+    <div class="search">
+        <form action="/shop/search" method="post">
+            <input type="text" name="query" placeholder="在这里输入搜索内容">
+            <button type="submit">搜索</button>
+        </form>
+    </div>
+</header>
+<div class="divider"></div>
+<main>
+    <div class="container">
+        <div class="left">
+            <img th:src="${product.imgPath}" alt="产品图片">
+        </div>
+        <div class="right">
+            <h1 th:text="${product.name}"></h1>
+            <p th:text="'￥'+${product.price}" class="price"></p><br><br>
+            <p th:text="'商品描述：'+${product.description}"></p>
+
+            <a href="#" class="add_to_cart">加入购物车</a>
+            <a href="/shop/buySuccess" class="buy_product">立即购买</a>
+            <!-- 可以在这里添加其他产品信息，如价格、规格等 -->
+        </div>
+    </div>
+</main>
+<script src="/shop/assets/JS/productDetail.js"></script>
+<script src="/shop/assets/JS/cart.js"></script>
+</body>
+
+</html>

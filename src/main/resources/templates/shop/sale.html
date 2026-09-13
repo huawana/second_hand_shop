@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" type="text/css" href="/shop/assets/css/header.css">
+    <link rel="stylesheet" type="text/css" href="/shop/assets/css/sale.css">
+</head>
+<body>
+<header>
+  <div class="logo">
+    <img src="/shop/assets/HTML-img/logo.png" alt="">
+  </div>
+  <div class="position">
+    <a href="/shop/city"><img src="/shop/assets/HTML-img/location.png" alt=""></a>
+    <ul>
+      <li th:text="${province}"></li>
+      <li th:text="${city}"></li>
+      <li th:text="${area}"></li>
+    </ul>
+  </div>
+  <div class="school">
+    <a href="/shop/school"><img src="/shop/assets/HTML-img/school.png" alt=""></a>
+    <ul>
+      <li th:text="${school}"></li>
+    </ul>
+  </div>
+  <ul class="navigation">
+    <li><a href="/shop/index">首页</a></li>
+    <li><a href="/shop/index/sortedByTime">最近发布</a></li>
+    <li><a href="/shop/index/chosenByLocation">同城优选</a></li>
+    <li><a href="/shop/index/chosenBySchool">校内交易</a></li>
+    <li><a href="/shop/sale">发布商品</a></li>
+
+  </ul>
+  <ul class="person">
+    <li>
+      <a href="/shop/person">
+        <img id="user-img" src="/shop/assets/HTML-img/user1.png" alt="">
+      </a>
+    </li>
+    <li>
+      <p th:text="'您好！' + ${shopusername}"></p>
+    </li>
+    <li>
+      <a href="/shop/cart">
+        <img id="cart-img" src="/shop/assets/HTML-img/cart1.png" alt="">
+      </a>
+    </li>
+    <li>
+      <a href="/shop/exit">
+        <img id="exit-img" src="/shop/assets/HTML-img/exit.png" alt="">
+      </a>
+    </li>
+  </ul>
+  <div class="search">
+    <form action="/shop/search" method="post">
+      <div class="input"></div>
+    </form>
+  </div>
+</header>
+<div class="main">
+  <!-- 导航条 -->
+  <!-- nav结束 -->
+  <!-- 内容区 -->
+  <div class="content">
+    <div class="table_card">
+      <div class="table_desc">
+        <div class="desc1">上架商品</div>
+      </div>
+      <div class="form">
+        <form action="/shop/uploadProduct" method="post" enctype="multipart/form-data">
+          <label th:text = "${saleError}" class="error"></label>
+          <div class="uploadPhoto">
+            <p>上传图片</p>
+            <input type="file" id="image" name="image" accept="image/*" required>
+          </div>
+          <div class="edit1">
+            <p>商品名称</p>
+            <input class="edit" type="text" name="name" required>
+          </div>
+          <div class="clear"></div>
+          <div class="edit1">
+            <p>商品价格</p>
+            <input class="edit" type="number" id="price" name="price" required>
+          </div>
+          <div class="edit1">
+            <p>商品描述</p>
+            <input class="edit" type="text" name="description" required>
+          </div>
+          <input class="button" type="submit" name="submit" value="确定">
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+<script src="/shop/assets/JS/sale.js"></script>
+</html>

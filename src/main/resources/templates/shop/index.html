@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="/shop/assets/css/index.css">
+    <link rel="stylesheet" href="/shop/assets/css/header.css">
+    <link rel="stylesheet" href="/shop/assets/css/common.css">
+    <title>Document</title>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <img src="/shop/assets/HTML-img/logo.png" alt="">
+        </div>
+        <div class="position">
+            <a href="/shop/city"><img src="/shop/assets/HTML-img/location.png" alt=""></a>
+            <ul>
+                <li th:text="${province}"></li>
+                <li th:text="${city}"></li>
+                <li th:text="${area}"></li>
+            </ul>
+        </div>
+        <div class="school">
+            <a href="/shop/school"><img src="/shop/assets/HTML-img/school.png" alt=""></a>
+            <ul>
+                <li th:text="${school}"></li>
+            </ul>
+        </div>
+        <ul class="navigation">
+            <li><a href="/shop/index">首页</a></li>
+            <li><a href="/shop/index/sortedByTime">最近发布</a></li>
+            <li><a href="/shop/index/chosenByLocation">同城优选</a></li>
+            <li><a href="/shop/index/chosenBySchool">校内交易</a></li>
+            <li><a href="/shop/sale">发布商品</a></li>
+        </ul>
+        <ul class="person">
+            <li>
+                <a href="/shop/person">
+                    <img id="user-img" src="/shop/assets/HTML-img/user1.png" alt="">
+                </a>
+            </li>
+            <li>
+                <p th:text="'您好！' + ${shopusername}"></p>
+            </li>
+            <li>
+                <a href="/shop/cart">
+                    <img id="cart-img" src="/shop/assets/HTML-img/cart1.png" alt="">
+                </a>
+            </li>
+            <li>
+                <a href="/shop/exit">
+                    <img id="exit-img" src="/shop/assets/HTML-img/exit.png" alt="">
+                </a>
+            </li>
+        </ul>
+        <div class="search">
+            <form action="/shop/search" method="post">
+                <input type="text" name="query" placeholder="在这里输入搜索内容">
+                <button type="submit">搜索</button>
+            </form>
+        </div>
+    </header>
+    <div class="divider"></div>
+    <main>
+        <div class="products">
+            <ul class="products_list">
+                <li th:each="product:${products}">
+                    <img th:src="${product.imgPath}">
+                    <div class="productDespContainer">
+                        <h3 th:text="${product.name}" class="productName"></h3>
+                    </div>
+                    <p th:text="'￥'+${product.price}" class="productPrice"></p>
+                    <a href="#" class="add_to_cart">加入购物车</a>
+                    <a th:href="'/shop/productDetail/' + ${product.id}" class="view_details">查看详情</a>
+                </li>
+            </ul>
+        </div>
+    </main>
+    <script src="/shop/assets/JS/index.js"></script>
+
+</body>
+</html>

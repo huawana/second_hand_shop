@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.shop.mapper.SearchMapper">
+    <update id="updateSearchByUserName">
+        update lxy_user set search=#{search} where username=#{username}
+    </update>
+    <select id="getSearchByUserName" resultType="java.lang.String">
+        select search from lxy_user where username=#{username}
+    </select>
+    <select id="getAllSearchList" resultType="java.lang.String">
+        select username,search from lxy_user
+    </select>
+    <select id="getSearchById" resultType="java.lang.String">
+        select search from lxy_user where id=#{id}
+    </select>
+</mapper>

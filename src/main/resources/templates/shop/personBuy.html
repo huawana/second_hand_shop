@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+  <link rel="stylesheet" href="/shop/assets/css/header.css">
+  <link rel="stylesheet" href="/shop/assets/css/person.css">
+  <link rel="stylesheet" href="/shop/assets/css/common.css">
+</head>
+<body>
+<header>
+  <div class="logo">
+    <img src="/shop/assets/HTML-img/logo.png" alt="">
+  </div>
+  <div class="position">
+    <a href="/shop/city"><img src="/shop/assets/HTML-img/location.png" alt=""></a>
+    <ul>
+      <li th:text="${province}"></li>
+      <li th:text="${city}"></li>
+      <li th:text="${area}"></li>
+    </ul>
+  </div>
+  <div class="school">
+    <a href="/shop/school"><img src="/shop/assets/HTML-img/school.png" alt=""></a>
+    <ul>
+      <li th:text="${school}"></li>
+    </ul>
+  </div>
+  <ul class="navigation">
+    <li><a href="/shop/index">首页</a></li>
+    <li><a href="/shop/index/sortedByTime">最近发布</a></li>
+    <li><a href="/shop/index/chosenByLocation">同城优选</a></li>
+    <li><a href="/shop/index/chosenBySchool">校内交易</a></li>
+    <li><a href="/shop/sale">发布商品</a></li>
+  </ul>
+  <ul class="person">
+    <li>
+      <a href="/shop/person">
+        <img id="user-img" src="/shop/assets/HTML-img/user1.png" alt="">
+      </a>
+    </li>
+    <li>
+      <p th:text="'您好！' + ${shopusername}"></p>
+    </li>
+    <li>
+      <a href="/shop/cart">
+        <img id="cart-img" src="/shop/assets/HTML-img/cart1.png" alt="">
+      </a>
+    </li>
+    <li>
+      <a href="/shop/exit">
+        <img id="exit-img" src="/shop/assets/HTML-img/exit.png" alt="">
+      </a>
+    </li>
+  </ul>
+  <div class="search">
+    <form action="/shop/search" method="post">
+      <div class="input"></div>
+    </form>
+  </div>
+</header>
+<div class="divider"></div>
+
+<div class="container">
+  <!-- 侧边栏 -->
+  <div class="sidebar">
+    <div class="menu">
+      <ul>
+        <li id="release">
+          <a href="/shop/personRelease">
+            <img src="/shop/assets/HTML-img/release.png">
+            <label>我发布的</label>
+          </a>
+        </li>
+        <li id="buy">
+          <a href="/shop/personBuy">
+            <img src="/shop/assets/HTML-img/buy.png">
+            <label>我买入的</label>
+          </a>
+        </li>
+        <li id="sell">
+          <a href="/shop/personSale">
+            <img src="/shop/assets/HTML-img/sell.png">
+            <label>我卖出的</label>
+          </a>
+        </li>
+        <li id="finishBuy">
+          <a href="/shop/personSuccessBuy">
+            <img src="/shop/assets/HTML-img/bought.png">
+            <label>完成的买入订单</label>
+          </a>
+        </li>
+        <li id="finishSell">
+          <a href="/shop/personSuccessSell">
+            <img src="/shop/assets/HTML-img/sale.png">
+            <label>完成的卖出订单</label>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <!-- 主内容区 -->
+  <!-- 内容区 -->
+  <div class="content">
+    <div class="table_card">
+      <div class="table">
+        <table>
+          <thead>
+          <th>
+            图片
+          </th>
+          <th>
+            商品名
+          </th>
+          <th>
+            商品价格
+          </th>
+          <th>
+            买入时间
+          </th>
+          <th>
+            状态
+          </th>
+          <th>
+            操作
+          </th>
+          </thead>
+          <tbody>
+          <tr th:each="product:${products}">
+            <td>
+              <img th:src="${product.imgPath}" alt="">
+            </td>
+            <td th:text="${product.name}" class="productName">
+            </td>
+            <td th:text="${product.price}">
+            </td>
+            <td th:text="${product.soldTime}">
+            </td>
+            <td th:text="${product.status}" class="status">
+            </td>
+            <td>
+              <a href="#" th:text="${product.buyerHandle}" onclick="changeBuyerStatus(event)" class="handle"></a>
+            </td>
+          </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/shop/assets/JS/person.js"></script>
+
+</body>
+</html>

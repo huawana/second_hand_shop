@@ -1,0 +1,8 @@
+target/
+out/
+.idea/
+*.iml
+*.log
+.hermes/
+*.tmp
+*.bak

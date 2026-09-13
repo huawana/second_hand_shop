@@ -1,0 +1,30 @@
+.choose-school{
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.choose{
+    padding-bottom:50px;
+}
+
+.submit-button {
+    background-color: white;
+    color: black;
+    font-size: 16px;
+    position:relative;
+    top:50px;
+    left:200px;
+    width:100px;
+    height:50px;
+    border-radius:50px;
+}
+
+input{
+    display:block;
+    width:500px;
+    height:50px;
+    border:1px solid black;
+    margin-top:20px;
+    border-radius:50px;
+}

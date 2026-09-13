@@ -1,0 +1,46 @@
+.container {
+  display: flex;
+}
+
+.left {
+  flex: 1;
+  height:450px;
+  width:450px;
+  padding-left:200px;
+}
+.left img{
+    height:450px;
+    width:450px;
+    border-radius: 10%;
+}
+
+.right {
+  flex: 1;
+}
+
+button a{
+    text-decoration: none;
+    color:white;
+}
+
+.buy_product,
+.add_to_cart {
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    color:white;
+}
+
+.add_to_cart:hover,
+.buy:hover {
+    background-color: #45a049;
+}
+
+.price{
+    color:orange;
+    font-size:20px;
+}
+
+

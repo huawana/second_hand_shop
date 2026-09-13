@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.admin.mapper.OrderMapper">
+    <insert id="insertNewOrder">
+        insert into lxy_order(product_id,sell_uid,buy_uid,created_at,`condition`) values(#{productId},#{sellUid},#{buyUid},NOW(),#{condition})
+    </insert>
+    <update id="updateOrderStatusById">
+        update lxy_order set `condition` = #{status} where product_id = #{id}
+    </update>
+    <delete id="deleteOrderById">
+        delete from lxy_order where id=#{id}
+    </delete>
+    <select id="getOrders" resultType="shop.admin.Bean.Order">
+        SELECT s.id,s.productName,s.sellerName,b.buyerName,s.createdAt,s.`condition` FROM
+        (select o.id AS id,p.`name` AS productName,u.username AS sellerName,o.created_at AS createdAt,o.`condition` AS `condition` from lxy_order o join lxy_product p join lxy_user u where o.sell_uid=u.id and o.product_id=p.id) s JOIN
+        (select o.id AS id,p.`name` AS productName,u.username AS buyerName,o.created_at AS createdAt,o.`condition` AS `condition` from lxy_order o join lxy_product p join lxy_user u where o.buy_uid=u.id and o.product_id=p.id) b WHERE s.id=b.id
+
+    </select>
+    <select id="getOrderByProductId" resultType="shop.admin.Bean.Order">
+        select * from lxy_order where product_id = #{id}
+    </select>
+    <select id="getOrderById" resultType="shop.admin.Bean.Order">
+        select * from lxy_order where id=#{id}
+    </select>
+</mapper>

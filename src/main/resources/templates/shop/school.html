@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+  <link rel="stylesheet" type="text/css" href="/shop/assets/css/header.css">
+  <link rel="stylesheet" type="text/css" href="/shop/assets/css/school.css">
+</head>
+<body>
+<header>
+  <div class="head">
+    <div class="logo">
+      <img src="/shop/assets/HTML-img/logo.png" alt="">
+    </div>
+    <ul class="navigation">
+      <li><a href="/shop/index">首页</a></li>
+      <li><a href="/shop/index/sortedByTime">最近发布</a></li>
+      <li><a href="/shop/index/chosenByLocation">同城优选</a></li>
+      <li><a href="/shop/index/chosenBySchool">校内交易</a></li>
+      <li><a href="/shop/sale">发布商品</a></li>
+
+    </ul>
+    <ul class="person">
+      <li>
+        <a href="/shop/person">
+          <img id="user-img" src="/shop/assets/HTML-img/user1.png" alt="">
+        </a>
+      </li>
+      <li>
+        <a href="/shop/cart">
+          <img id="cart-img" src="/shop/assets/HTML-img/cart1.png" alt="">
+        </a>
+      </li>
+      <li>
+        <a href="/shop/exit">
+          <img id="exit-img" src="/shop/assets/HTML-img/exit.png" alt="">
+        </a>
+      </li>
+    </ul>
+  </div>
+
+</header>
+<main>
+  <div class="choose-school">
+    <div class="choose">请填写你的大学：</div>
+    <form action="/shop/chooseSchool" id="schoolForm">
+      <input id="schoolText" name="schoolText">
+      <button type="submit" class="submit-button">提交</button>
+    </form>
+  </div>
+</main>
+</body>
+
+</html>

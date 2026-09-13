@@ -1,0 +1,43 @@
+.divider {
+  border-top: 1px solid #ccc;
+  margin: 50px 0;
+}
+
+.input {
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  margin-right: 5px;
+  margin-left:50px;
+  width:800px;
+  height:100px;
+}
+
+.product_img{
+    width: 50%; /* 设置宽度 */
+    height: 50%; /* 设置高度 */
+    object-fit: cover;
+    position:relative;
+    left:20%;
+    top:25%;
+    border-radius:5%;
+}
+.left-div {
+  float: left;
+  width: 50%; /* 左侧宽度 */
+}
+
+.right-div {
+  float: right;
+  width: 50%; /* 右侧宽度 */
+}
+.successTitle{
+    position:relative;
+    left:37%;
+    font-size:30px;
+    color:#ff6200;
+}
+
+.productName{
+
+}

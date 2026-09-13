@@ -1,0 +1,69 @@
+
+
+.products_list {
+    display: flex;
+    flex-wrap: wrap;
+    list-style:none;
+    width:98%;
+    margin-left:3%;
+}
+
+.products_list li {
+    flex-basis: 20%;
+    margin:20px;
+    width:24%;
+}
+.products_list li img{
+    width:100%;
+    height: auto;
+    aspect-ratio: 1/1;
+    justify-content: center;
+}
+
+.products_list li h3 {
+    font-size: 18px;
+    margin-bottom: 5px;
+}
+
+
+
+.products_list li .add_to_cart,
+.products_list li .view_details {
+    text-decoration: none;
+    color:white;
+    padding:5px 10px;
+    background-color: #4CAF50;
+    color: #fff;
+    border: none;
+
+}
+
+.products_list li .add_to_cart:hover,
+.products_list li .view_details:hover {
+    background-color: #45a049;
+}
+
+.products_list li .view_details{
+    position:relative;
+    left:36%;
+}
+
+.productDespContainer {
+    height: 5em; /* 设置容器的高度，可根据需要调整 */
+    overflow: hidden;
+}
+
+.productName {
+    display: -webkit-box;
+    -webkit-line-clamp: 2; /* 设置最大行数 */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis; /* 使用省略号代替超出部分 */
+}
+
+.productPrice{
+    font-size:24px;
+    color:rgb(255,98,0);
+    font-weight:700;
+    margin:10px 0;
+}

@@ -1,0 +1,52 @@
+.login-container {
+  width: 300px;
+  margin: 0 auto;
+  padding: 20px;
+  border-radius: 5px;
+  text-align: center;
+}
+
+.login-container h1 {
+  font-size: 24px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+.login-container h3 {
+    text-align: left;
+    font-size :20px;
+    color:red;
+    font-family: "宋体", SimSun, serif; /* 设置字体为宋体 */
+    font-weight: normal; /* 设置字体为普通（非加粗） */
+}
+.login-container input[type="text"],
+.login-container input[type="password"] {
+  width: 92%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.login-container button[type="submit"] {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  background-color: #4caf50;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.login-container button[type="submit"]:hover {
+  background-color: #45a049;
+}
+
+.login-container p {
+  margin-top: 20px;
+}
+
+.login-container p a {
+  text-decoration: none;
+  color: #007bff;
+}
