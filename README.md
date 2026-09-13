@@ -21,6 +21,7 @@
 | 缓存 / 会话存储 | Redis 5（Phase 1 收尾接入：access token 黑名单 + refresh token 存储，db 3 + `shop:` 前缀） |
 | 自研组件 | `oss-spring-boot-starter`（自定义 Starter，自动配置文件存储，本地磁盘 ⇄ 对象存储可切换） |
 | 持久层能力 | MyBatis-Plus：`BaseMapper` 通用 CRUD、分页插件、乐观锁插件（`@Version`）、公共字段自动填充 |
+| 并发控制 | 库存扣减双策略（策略模式，`shop.stock.strategy=optimistic\|pessimistic`）：乐观锁+重试 / 悲观锁 `SELECT ... FOR UPDATE` |
 | 连接池 | HikariCP（Spring Boot 默认；原声明的 Druid 全项目零引用，Phase 1 已移除） |
 | 日志 | SLF4J + Logback（控制台 + 滚动文件 + 错误单独归档） |
 | 校验 | JSR-303 / Hibernate Validator |
@@ -269,6 +270,31 @@ fetch('/shop/addToCart', {...})
 - 业务失败抛 `BizException(ErrorCode.XXX)`，由全局处理器统一转换，不要在 Controller 里自己拼返回结构
 - **不要提交 `target/`、`logs/`、`.idea/`**（已在 `.gitignore`）
 - 数据库变更必须同步更新 `docs/schema.sql`，并提供可执行的迁移脚本（如 `docs/migration_phase1.sql`）
+
+### 🧮 库存与并发（Phase 2.4 起）
+
+二手商品一物一件，最典型的并发问题是**超卖**：两个人同时买同一件，
+「先查是否售出 → 再标记售出」这种两步写法会让两人都成功。
+
+现在的做法是把「检查」与「扣减」压进一条 SQL：
+
+```sql
+-- 乐观锁：version 条件由 MyBatis-Plus 乐观锁插件自动追加，影响行数为 0 即表示被别人抢先改了
+update lxy_product set stock = stock - 1, version = version + 1
+ where id = ? and version = ? and stock >= 1
+```
+
+两种策略用配置切换（`shop.stock.strategy`），业务代码零改动：
+
+| 值 | 实现 | 特点 |
+|---|---|---|
+| `optimistic`（默认）| 读版本 → 条件更新 → 冲突重试 | 不阻塞；冲突多时重试会放大库压力 |
+| `pessimistic` | `SELECT ... FOR UPDATE` 锁行后操作 | 一次成功不重试；持锁期间其他请求排队 |
+
+- **重试必须在事务外层**：REPEATABLE READ 下事务内的普通 SELECT 复用同一份快照，
+  事务内重试读到的还是旧版本号，必然再次失败（见 `PurchaseService` 与 `PurchaseTxService` 的分工）。
+- **扣库存 + 建订单 + 标记售出在同一个事务内**，避免半完成状态。
+- **抢购失败返回 409**（不是 500）：这是「资源状态已变更」的预期内失败，不该混进服务端错误率。
 
 ### 🔐 认证与授权（Phase 1 起）
 

@@ -16,6 +16,7 @@ import shop.common.BizException;
 import shop.common.ErrorCode;
 import shop.common.Result;
 import shop.common.service.CartService;
+import shop.common.service.PurchaseService;
 import shop.shop.Bean.CartItemRequest;
 import shop.shop.tools.SessionCheck;
 
@@ -31,13 +32,16 @@ public class ShopBuyController {
     private final OrderMapper orderMapper;
     private final UserMapper userMapper;
     private final CartService cartService;
+    private final PurchaseService purchaseService;
 
     public ShopBuyController(ProductMapper productMapper, OrderMapper orderMapper,
-                             UserMapper userMapper, CartService cartService) {
+                             UserMapper userMapper, CartService cartService,
+                             PurchaseService purchaseService) {
         this.productMapper = productMapper;
         this.orderMapper = orderMapper;
         this.userMapper = userMapper;
         this.cartService = cartService;
+        this.purchaseService = purchaseService;
     }
 
     /**
@@ -101,17 +105,22 @@ public class ShopBuyController {
         if (buyerName.equals(product.getSellerName())) {
             throw new BizException(ErrorCode.BIZ_ERROR, "不能购买自己发布的商品");
         }
-        // 商品即将售出 → 从【所有人】的购物车里移除。这才是「跨用户清理」的正确场景：
-        // 一件二手商品只有一个买家，其他人购物车里的这条已经不可能买到了。
-        cartService.removeProductFromAllCarts(id);
-
         int productId = product.getId();
         int sellerId = userMapper.getIdByUserName(product.getSellerName());
         int buyId = userMapper.getIdByUserName(buyerName);
+
+        // 【Phase 2.4 核心修复】原来是「先 product 查出来判断是否售出 → 再 updateSellTimeById」，
+        // 两步之间没有原子性：两个人同时买同一件商品都能通过检查，最终生成两笔订单（超卖）。
+        // 现在换成原子的库存扣减（检查与扣减压进同一条带版本条件的 UPDATE），
+        // 并且「扣库存 + 建订单 + 标记售出」在同一个事务里完成，不会出现半完成状态。
+        // 库存不足会抛 BizException，由全局异常处理器转成统一响应体。
+        int attempts = purchaseService.purchase(productId, sellerId, buyId);
+
+        // 商品已售出 → 从【所有人】的购物车移除（一件二手商品只有一个买家）
+        cartService.removeProductFromAllCarts(productId);
         session.setAttribute("productId", productId);
-        orderMapper.insertNewOrder(productId, sellerId, buyId, "等待发货");
-        productMapper.updateSellTimeById(id);
-        log.info("用户[{}]下单商品 id={} name={} 卖家[{}]", buyerName, productId, product.getName(), product.getSellerName());
+        log.info("用户[{}]下单商品 id={} name={} 卖家[{}] 第 {} 次尝试成功",
+                buyerName, productId, product.getName(), product.getSellerName(), attempts);
         return Result.success();
     }
 

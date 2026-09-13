@@ -137,6 +137,9 @@ public class GlobalExceptionHandler {
                 return HttpStatus.FORBIDDEN;
             case 404:
                 return HttpStatus.NOT_FOUND;
+            case 409:
+                // 并发抢购失败（乐观锁冲突/已被买走）：客户端可重试或提示，但绝不该算成服务端故障
+                return HttpStatus.CONFLICT;
             default:
                 return HttpStatus.INTERNAL_SERVER_ERROR;
         }

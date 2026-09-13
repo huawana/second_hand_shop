@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.admin.mapper.ProductStockMapper">
+
+    <!--
+      悲观锁：SELECT ... FOR UPDATE。
+      注意只查写模型需要的列（id/stock/version/status），不要 select * ——
+      FOR UPDATE 会锁住匹配到的行，查的列越少越不容易意外扩大锁的范围。
+      另外：若 where 条件走不到索引，InnoDB 会退化成锁表，所以 id 主键查询是最安全的形态。
+    -->
+    <select id="selectByIdForUpdate" resultType="shop.admin.Bean.ProductStock">
+        select id, stock, version, status
+        from lxy_product
+        where id = #{id}
+        for update
+    </select>
+
+</mapper>
