@@ -92,7 +92,7 @@ public class ShopSaleController {
             return "redirect:/shop/index";
         }else{
             m.addAttribute("product",product);
-            return "/shop/changeProductInformation";
+            return "shop/changeProductInformation";
         }
     }
 

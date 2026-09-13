@@ -207,6 +207,35 @@ fetch('/shop/addToCart', {...})
 - **不要提交 `target/`、`logs/`、`.idea/`**（已在 `.gitignore`）
 - 数据库变更必须同步更新 `docs/schema.sql`
 
+### ⚠️ 视图名不要带前导斜杠
+
+```java
+return "shop/index";     // ✅ 正确
+return "/shop/index";    // ❌ 错误：spring-boot:run 能跑，打成 jar 后必然 500
+```
+
+Thymeleaf 的解析前缀是 `classpath:/templates/`。带前导斜杠会拼成
+`classpath:/templates//shop/index.html`（双斜杠）：
+
+- `spring-boot:run` 走的是 `target/classes` 展开目录，文件系统会把 `//` 归一化 → 正常
+- 打包成 jar 后走 ZIP 条目的精确匹配，`templates//shop/index.html` 查不到 → 报
+  `Error resolving template` → 500
+
+**所以任何页面改动都必须用打包后的 jar 验证一遍，不能只验证 `spring-boot:run`。**
+（Phase 0 收尾时踩过这个坑：26 个视图名带前导斜杠，IDE 里全绿、jar 里全 500）
+
+### 配置覆盖
+
+`Application.main` 必须把 `args` 传给 `SpringApplication.run(Application.class, args)`，
+否则 `--server.port` / `--spring.profiles.active` / `--spring.datasource.url` 等
+命令行参数会被静默丢弃（Phase 0 修过这个 bug）。
+
+```bash
+# 本地验证打包产物（推荐固定用一个不冲突的端口）
+mvn clean package
+java -jar target/springboot3-1.0-SNAPSHOT.jar --server.port=18080
+```
+
 ---
 
 ## 已知问题与后续计划

@@ -25,7 +25,7 @@ public class ShopLoginController {
 
     @GetMapping("/shop/login")
     public String shopLogin(){
-        return "/shop/login";
+        return "shop/login";
     }
 
     @PostMapping("/shop/login")
@@ -34,7 +34,7 @@ public class ShopLoginController {
         User user = userMapper.getUserByUsername(username);
         if(user==null){
             m.addAttribute("loginMistake","该用户名不存在");
-            return "/shop/login";
+            return "shop/login";
 
         }
         String encryptedPassword = MD5passEncryption.encrypt(password);
@@ -48,7 +48,7 @@ public class ShopLoginController {
             return "redirect:/shop/index";
         }else{
             m.addAttribute("loginMistake","用户名或密码不正确");
-            return "/shop/login";
+            return "shop/login";
         }
     }
 
@@ -57,16 +57,16 @@ public class ShopLoginController {
         HttpSession session = request.getSession();
         if(username.length()>8){
             m.addAttribute("signUpMistake","用户名过长");
-            return "/shop/signup";
+            return "shop/signup";
         }else if(!StringContainsMultipleTypes.stringJudgeIfContainTwoType(password)){
             m.addAttribute("signUpMistake","密码格式不符");
-            return "/shop/signup";
+            return "shop/signup";
         }else if(!Objects.equals(confirmpassword, password)){
             m.addAttribute("signUpMistake","两次密码不一致");
-            return "/shop/signup";
+            return "shop/signup";
         }else if(password.length()<8||password.length()>16){
             m.addAttribute("signUpMistake","密码格式不符");
-            return "/shop/signup";
+            return "shop/signup";
         }else{
             String encodedPassword = MD5passEncryption.encrypt(password);
             userMapper.addUser(username,encodedPassword,null,null);
@@ -82,7 +82,7 @@ public class ShopLoginController {
 
     @GetMapping("/shop/signup")
     public String shopSignUP(){
-        return "/shop/signup";
+        return "shop/signup";
     }
 
     @GetMapping("/shop/exit")
@@ -102,7 +102,7 @@ public class ShopLoginController {
         String changeError = (String) session.getAttribute("changeError");
         m.addAttribute("changeError",changeError);
         session.removeAttribute("changeError");
-        return "/shop/changePassword";
+        return "shop/changePassword";
     }
 
     @PostMapping("/shop/changePassword")

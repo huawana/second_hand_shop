@@ -50,7 +50,7 @@ public class ShopPersonalController {
         if(SessionCheck.checkSessionName(session)){
             return "redirect:/shop/login";
         }else {
-            return "/shop/city";
+            return "shop/city";
         }
 
     }
@@ -61,7 +61,7 @@ public class ShopPersonalController {
         if(SessionCheck.checkSessionName(session)){
             return "redirect:/shop/login";
         }else {
-            return "/shop/school";
+            return "shop/school";
         }
 
     }
@@ -123,7 +123,7 @@ public class ShopPersonalController {
             m.addAttribute("cartProduct",cartProductList);
             SessionCheck.checkSessionPosition(session,m);
             SessionCheck.checkSessionSchool(session,m);
-            return "/shop/cart";
+            return "shop/cart";
         }
     }
 
@@ -152,7 +152,7 @@ public class ShopPersonalController {
             int uid = userMapper.getIdByUserName(username);
             List<Product> productList = productMapper.getProductsByUid(uid);
             m.addAttribute("products",productList);
-            return "/shop/personRelease";
+            return "shop/personRelease";
         }
     }
 
@@ -178,7 +178,7 @@ public class ShopPersonalController {
                 }
             }
             m.addAttribute("products",productList);
-            return "/shop/personSale";
+            return "shop/personSale";
         }
     }
 
@@ -205,7 +205,7 @@ public class ShopPersonalController {
                 }
             }
             m.addAttribute("products",productList);
-            return "/shop/personBuy";
+            return "shop/personBuy";
         }
     }
 
@@ -254,7 +254,7 @@ public class ShopPersonalController {
             int uid = userMapper.getIdByUserName(username);
             List<Product> productList = productMapper.getFinishBuyProductByUsername(username);
             m.addAttribute("products",productList);
-            return "/shop/personSuccessBuy";
+            return "shop/personSuccessBuy";
         }
     }
 
@@ -271,7 +271,7 @@ public class ShopPersonalController {
             int uid = userMapper.getIdByUserName(username);
             List<Product> productList = productMapper.getFinishSellProductByUsername(username);
             m.addAttribute("products",productList);
-            return "/shop/personSuccessSell";
+            return "shop/personSuccessSell";
         }
     }
 

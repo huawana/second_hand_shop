@@ -117,6 +117,6 @@ public class ShopBuyController {
         m.addAttribute("product", product);
         m.addAttribute("order",order);
         // 返回购买成功的页面视图
-        return "/shop/buySuccess";
+        return "shop/buySuccess";
     }
 }

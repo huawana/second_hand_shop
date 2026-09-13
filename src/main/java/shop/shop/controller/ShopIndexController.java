@@ -57,7 +57,7 @@ public class ShopIndexController {
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
-        return "/shop/index";
+        return "shop/index";
     }
 
     @GetMapping("/shop/index/sortedByTime")
@@ -74,7 +74,7 @@ public class ShopIndexController {
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
-        return "/shop/index";
+        return "shop/index";
     }
 
 
@@ -89,7 +89,7 @@ public class ShopIndexController {
             SessionCheck.checkSessionSchool(session,m);
             List<Product> productList = new ArrayList<>();
             m.addAttribute("products",productList);
-            return "/shop/person";
+            return "shop/person";
         }
     }
 
@@ -123,7 +123,7 @@ public class ShopIndexController {
                 m.addAttribute("products", productList);
                 SessionCheck.checkSessionPosition(session,m);
                 SessionCheck.checkSessionSchool(session,m);
-                return "/shop/index";
+                return "shop/index";
             }
         }
     }
@@ -148,7 +148,7 @@ public class ShopIndexController {
             m.addAttribute("products", productList);
             SessionCheck.checkSessionPosition(session,m);
             SessionCheck.checkSessionSchool(session,m);
-            return "/shop/index";
+            return "shop/index";
         }
     }
 
@@ -168,7 +168,7 @@ public class ShopIndexController {
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
-        return "/shop/sale";
+        return "shop/sale";
     }
 
 //    @PostMapping("/shop/productDetail")
@@ -200,7 +200,7 @@ public class ShopIndexController {
 //        Product product = productMapper.getProductById(id);
 //        System.out.println(product);
 //        m.addAttribute("product",product);
-//        return "/shop/productDetail";
+//        return "shop/productDetail";
 //    }
 
     @GetMapping("/shop/productDetail/{id}")
@@ -216,6 +216,6 @@ public class ShopIndexController {
 
         productMapper.updateProductViewCount(id,product.getViewCount()+1);
         m.addAttribute("product",product);
-        return "/shop/productDetail";
+        return "shop/productDetail";
     }
 }

@@ -39,7 +39,7 @@ public class ProductController {
         }
         List<Product> productList = productMapper.getProducts("");
         m.addAttribute("products",productList);
-        return "/admin/product";
+        return "admin/product";
     }
 
     /**
@@ -53,7 +53,7 @@ public class ProductController {
             return "redirect:/admin/login";
         }
         m.addAttribute("users", userMapper.getUsers());
-        return "/admin/product_add";
+        return "admin/product_add";
     }
 
     /**
@@ -96,7 +96,7 @@ public class ProductController {
             }
         }
         m.addAttribute("users", userMapper.getUsers());
-        return "/admin/product_add";
+        return "admin/product_add";
     }
 
     @GetMapping("/admin/product_delete/{id}")

@@ -864,9 +864,9 @@ Phase 0（1-2 天）：
 | 0.3 | 修复 10 个会导致运行时崩溃的缺陷 | ✅ |
 | 0.4 | 修复 4 个逻辑缺陷（`!= "null"`、定时任务循环内写库、图片删除路径、imgPath 不一致） | ✅ |
 | 0.5 | 工程化地基（统一响应体 / 全局异常 / 参数校验 / 日志规范 / 配置外置 / 45 个单测） | ✅ |
-| 0.6 | 编译 + 启动 + 全链路端到端验证 | ✅ |
+| 0.6 | 编译 + 启动 + 打包产物端到端验证（54 项断言全绿） | ✅ |
 
-## 修复清单（14 项）
+## 修复清单（17 项：计划内 14 + 打包验证阶段新发现 3）
 
 **必崩类（10）**
 
@@ -891,6 +891,18 @@ Phase 0（1-2 天）：
 | 12 | `DailyUpdateTask:52` | 写库语句在 while 循环体内（N 次无效写）；全部淘汰时不写回 |
 | 13 | `ShopSaleController:107` | 用 URL 当磁盘路径删文件，永远删不掉 |
 | 14 | `ShopSaleController:113` | 存图用 `{id}.png` 但写回库用旧 `imgPath`，可能造成坏数据 |
+
+**打包验证阶段新发现（3 项，均为「IDE 能跑、jar 跑不起来」类问题）**
+
+| # | 位置 | 问题 | 根因 |
+|---|---|---|---|
+| 15 | 10 个文件 / 34 处视图名 | 打成 jar 后**所有页面 500** | `return "/shop/index"` 带前导斜杠 → `classpath:/templates//shop/index.html`（双斜杠）。展开目录会归一化 `//`，ZIP 条目匹配不会 → `Error resolving template` |
+| 16 | `Application:11` | 所有命令行参数静默失效 | `SpringApplication.run(Application.class)` 丢了 `args`，`--server.port`/`--spring.profiles.active` 全不生效，破坏配置外置能力 |
+| 17 | `ShopCartController`（自引入） | 我在批量修视图名时误把 `return "redirect:/shop/cart"` 改成 `return "shop/cart"`，回退了 Bug 5 的重定向修复 | 补丁的模糊匹配命中了注释里的同名文本；已按「重读文件再改」的原则修正 |
+
+> **教训（已写入 README 开发约定）：** 任何页面改动都必须用**打包后的 jar** 验证一遍，
+> 只跑 `spring-boot:run` 会漏掉整类问题。缺陷 15 影响全部 25 个模板，若留到 Phase 10
+> 做 Docker 时才发现，排查成本会高得多。
 
 ## 顺带修复的安全问题（原本不在清单里）
 
@@ -921,6 +933,24 @@ Phase 0（1-2 天）：
 Tests run: 45, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
+
+**打包产物端到端验证（`mvn clean package` + `java -jar`，端口 18080）**
+
+```
+STEP 1/3  干净构建 + 单元测试          Tests run: 45, Failures: 0 → BUILD SUCCESS
+          可执行 jar                  target/springboot3-1.0-SNAPSHOT.jar (116M)
+STEP 2/3  应用启动                    Started Application in 3.835 seconds
+STEP 3/3  接口行为验证                 RESULT: PASS=54  FAIL=0
+```
+
+覆盖：统一响应体契约、异常→HTTP 状态码映射（400/401/403/404）、
+13 个页面渲染（含此前 500 的全部模板）、登录与会话保持、后台 7 个页面、
+multipart 上传落盘、2 个越权场景、中文编码链路（HTTP→JDBC→MySQL）、
+运行期异常扫描。数据完整性核对后与基线一致
+（商品 3659 / 用户 30 / 订单 28 / 购物车 29，图片 3665 张）。
+
+**交付时的一条硬性要求：** 页面相关改动必须用打包后的 jar 验证，
+不能只跑 `spring-boot:run`（原因见「新发现 #15」，已在 README 里写成开发约定）。
 
 **端到端冒烟（应用启动于 8080，Maven 3.9.9 / JDK 22）**
 

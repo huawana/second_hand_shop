@@ -55,6 +55,6 @@ public class ShopSearchController {
                 searchMapper.updateSearchByUserName(username,newSearch);
             }
         }
-        return "/shop/index";
+        return "shop/index";
     }
 }

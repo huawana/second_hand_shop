@@ -57,7 +57,7 @@ public class UserController {
         if(session.getAttribute("adminuser")==null){
             return "redirect:/admin/login";
         }
-        return "/admin/user_add";
+        return "admin/user_add";
     }
 
 

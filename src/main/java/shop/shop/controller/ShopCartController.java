@@ -66,7 +66,7 @@ public class ShopCartController {
             String newProductList = StringToList.listToString(numList);
             cartMapper.updateCartProducts(id,newProductList);
         }
-        // 【Bug 修复】原为 return "/shop/cart"（转发），但本方法没有往 Model 里放 cartProduct，
+        // 【Bug 修复】原为转发到视图名，但本方法没有往 Model 里放 cartProduct，
         // 模板渲染时拿不到数据。改为重定向，由 GET /shop/cart 重新装配数据。
         return "redirect:/shop/cart";
     }

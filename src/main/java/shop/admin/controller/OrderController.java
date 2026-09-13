@@ -27,7 +27,7 @@ public class OrderController {
         }
         List<Order> orderList = orderMapper.getOrders();
         m.addAttribute("orders",orderList);
-        return "/admin/order";
+        return "admin/order";
     }
 
     @GetMapping("/admin/order_delete/{id}")
