@@ -271,6 +271,25 @@ fetch('/shop/addToCart', {...})
 - **不要提交 `target/`、`logs/`、`.idea/`**（已在 `.gitignore`）
 - 数据库变更必须同步更新 `docs/schema.sql`，并提供可执行的迁移脚本（如 `docs/migration_phase1.sql`）
 
+### 🔎 索引与查询优化（Phase 2.6 起）
+
+对 6 条真实高频 SQL 用 `EXPLAIN` 做了前后对比（脚本 `.hermes/index-report.py`，可复跑）：
+
+| 查询 | 场景 | 优化前 | 优化后 |
+|---|---|---|---|
+| `lxy_user where username=?` | **每个请求**都按用户名查 id | 全表扫描 30 行 | **const**，`uk_username`，1 行 |
+| `lxy_product where img_store_path=?` | 加购/下单/改状态反查商品 | 全表扫描 **3628** 行 | **const**，`uk_img_path`，1 行 |
+| 同城筛选 | 同城列表 | 两层全表扫描 (30 × 3628) | `idx_location`(1) × `idx_uid_sold`(62) |
+| 按学校筛选 | 同校列表 | 两层全表扫描 (30 × 3628) | `idx_school`(1) × `idx_uid_sold`(62) |
+| `lxy_order where product_id=?` | 订单页 / 状态推进 | 全表扫描 28 行 | **ref**，`idx_product`，1 行 |
+
+- 其中 `uk_username`、`uk_img_path` 用 **UNIQUE**：它们同时是真实业务约束
+  （用户名唯一、一件商品对应一个图片文件），唯一索引把「代码里检查」升级为「数据库保证」。
+- **首页那条刻意不优化，并给出了实测论证**：筛选条件 `sold_time is null` 在 3628 件商品里命中 3626 件
+  （选择性 0.06%），加 `idx_sold_time` 后优化器不选它、计划反而从扫 3628 行变成 30×62 的循环，
+  估算代价 514 → 641 更贵，已撤掉。正确解法是分页（`order by id desc limit N` 走主键）。
+  —— 索引的价值来自**选择性**而不是数量。
+
 ### 📦 订单状态机与明细（Phase 2.5 起）
 
 订单状态用枚举 + 显式流转表定义，而不是散在流程代码里的 if/else：

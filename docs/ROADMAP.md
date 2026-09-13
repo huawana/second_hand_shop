@@ -35,7 +35,7 @@
 |---|---|---|---|
 | Phase 0 修 bug + 工程化地基 | ✅ 已完成 | 2026-09-13 | 见文末「Phase 0 完成报告」 |
 | Phase 1 Spring Boot 3 + Security + JWT | ✅ 已完成 | 2026-09-13 | 1.1–1.8 全部完成（含令牌生命周期、自定义 starter），见文末「Phase 1 完成报告」 |
-| Phase 2 领域建模 + 常规电商闭环 | 🟡 进行中 | — | 2.1 ✅ 2.2 ✅ 2.3 ✅（含修掉真实 CSRF 缺陷）2.4 ✅（库存双策略 + 并发不超卖）2.5 ✅（订单状态机 + 明细快照 + PO/DTO/VO 分层）；2.6 索引与 EXPLAIN 待做 |
+| Phase 2 领域建模 + 常规电商闭环 | 🟡 进行中 | — | 2.1 ✅ 2.2 ✅ 2.3 ✅（含修掉真实 CSRF 缺陷）2.4 ✅（库存双策略 + 并发不超卖）2.5 ✅（订单状态机 + 明细快照 + PO/DTO/VO 分层）2.6 ✅（6 条高频 SQL 的 EXPLAIN 前后对比，6 个索引，含一条「刻意不加」的实测论证）—— **Phase 2 全部完成** |
 | Phase 3 Redis 缓存 + 分布式锁 | ⏳ 待开始 | — | **必做** |
 | Phase 4 MQ + 定时任务（含秒杀基础版）| ⏳ 待开始 | — | **必做** |
 | Phase 5 工程化补齐（文档 / AOP / 幂等 / 模拟支付）| ⏳ 待开始 | — | 加分 |
@@ -254,9 +254,34 @@ Phase 6  部署交付（Docker Compose/Nginx/压测数字/面试问答）       
 
 ### 2.6 索引优化专项（考点 1 —— 简历上最好写的量化数字）
 
-- 给 `product(category_id, status, created_at)`、`order(user_id, status)`、`order_item(order_id)` 建索引
-- 用 `EXPLAIN` 做**前后对比**（`type` / `rows` / `Extra`），把表格写进 README
-- 顺带讲最左前缀、回表、覆盖索引
+用 `.hermes/index-report.py` 对 6 条**真实高频 SQL** 取 EXPLAIN 前后快照
+（脚本会自己从库里取真实参数值，数据变了也能重跑）：
+
+**优化前：6 条全部是全表扫描（`access_type=ALL`、`key=NULL`）**
+
+| 查询 | 场景 | 优化前计划 | 优化后计划 |
+|---|---|---|---|
+| Q1 `lxy_user username=?` | **每个请求**都要按用户名查 id（另有 4 条 UPDATE 也用它） | ALL，扫 30 行 | **const**，`uk_username`，1 行 |
+| Q2 `lxy_product img_store_path=?` | 加购/下单/改状态都要按图片路径反查商品 | ALL，扫 **3628** 行 | **const**，`uk_img_path`，1 行 |
+| Q4 同城筛选（province/city/area） | 同城列表 | u:ALL(30) × p:ALL(**3628**) [两层全表扫描] | u:**ref** `idx_location`(1) × p:**ref** `idx_uid_sold`(62) |
+| Q5 按学校筛选 | 同校列表 | u:ALL(30) × p:ALL(**3628**) [两层全表扫描] | u:**ref** `idx_school`(1) × p:**ref** `idx_uid_sold`(62) |
+| Q6 `lxy_order where product_id=?` | 订单页 / 状态推进 | ALL，扫 28 行 | **ref**，`idx_product`，1 行 |
+| Q3 首页在售列表 | 首页 | ALL，扫 3628 行 | **仍是 ALL**（见下，这是刻意的、有理由的） |
+
+新增 6 个索引（`uk_username` / `uk_img_path` / `idx_uid_sold` / `idx_location` / `idx_school` / `idx_product`），
+其中两个做成 **UNIQUE**：它们同时是真实的业务约束（用户名唯一、一件商品一个图片文件），
+用唯一索引等于把「靠代码检查」升级成「由数据库保证」—— 入库前都校验过现有数据无重复。
+
+**为什么首页那条 Q3 没有优化（这条比「加了多少索引」更值得讲）**
+
+首页的筛选条件是 `sold_time is null`，而 3628 件商品里 3626 件在售 —— 这个谓词只过滤 0.06% 的行，
+**选择性极差**。实测给它加 `idx_sold_time` 单列索引：优化器并没有选它（`key` 依旧是 `idx_uid_sold`），
+却把计划换成了「29 个用户 × 每用户 62 行」的循环，估算代价从 514.03 **升到 641.22**，更贵了，于是撤掉。
+正确解法是**分页**（`order by id desc limit N` 走主键），留到 Phase 5 的 DTO/VO 分页一起做。
+
+> 面试话术：索引的价值来自**选择性**，不是数量。建在「命中 99.9% 行」的列上的索引几乎不携带信息量，
+> 优化器不会选它，剩下的只有写入成本。所以「加索引」的正确姿势是先 EXPLAIN 看计划、再加、再加完复测，
+> 而不是把可能用到 WHERE 的列都建一遍。
 
 **验收：** 分类 → 商品 → 购物车 → 下单 → 支付 → 评价 全链路走通；
 README 有 `EXPLAIN` 前后对比表、乐观锁与悲观锁的对比结论。
@@ -273,7 +298,8 @@ README 有 `EXPLAIN` 前后对比表、乐观锁与悲观锁的对比结论。
   重试置于事务外（RR 隔离下事务内重试是空转）；预期内失败改用 409 而非 500 |
 | 2.5 订单状态机 + order_item | ✅ | 枚举状态机（显式流转表 + 终态）替代 Controller 里的 if/else；建单写全字段（order_no/status/total_amount/pay_time）+ 明细快照；
   「带旧状态条件的 UPDATE」把校验下沉到数据库层（同时挡住非法流转与并发重复推进）；新增 10 个状态机单测 |
-| 2.6 索引 EXPLAIN 前后对比 | ⏳ | — |
+| 2.6 索引 EXPLAIN 前后对比 | ✅ | 6 条高频 SQL 优化前**全部全表扫描** → 优化后 5 条转为 const/ref；新增 6 索引（2 个 UNIQUE 兼业务约束）；
+  首页那条**刻意不优化**并给出实测论证（选择性 0.06%，加索引后代价 514→641 反而变差，已撤掉）；脚本 `.hermes/index-report.py` 可复跑 |
 
 **2.2 踩到的坑（面试可讲）**
 - MyBatis-Plus 3.5.9 起把依赖 JSqlParser 的功能（首当其冲是分页插件 `PaginationInnerInterceptor`）

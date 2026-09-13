@@ -220,6 +220,46 @@ CALL add_index_if_missing('lxy_order', 'uk_order_no',      'UNIQUE KEY `uk_order
 -- 「我买到的」按买家+状态查、「我卖出的」按卖家+状态查
 CALL add_index_if_missing('lxy_order', 'idx_user_status',     'KEY `idx_user_status` (`buy_uid`, `status`)');
 CALL add_index_if_missing('lxy_order', 'idx_seller_status',   'KEY `idx_seller_status` (`sell_uid`, `status`)');
+
+-- ---------------------------------------------------------------------------
+-- Phase 2.6：索引优化专项（依据：.hermes/index-report.py 的 EXPLAIN 前后对比）
+-- 加了什么、为什么加，全部有实测支撑（详见 docs/ROADMAP.md 的 Phase 2.6 小节）
+-- ---------------------------------------------------------------------------
+
+-- ① 认证热路径：每个请求都要按用户名查 id；另外有 4 条 UPDATE ... where username=?
+--    也在用它（改资料/改位置/改学校）。原来没索引 → 每次全表扫描。
+--    同时它是一条真实的业务约束（用户名必须唯一），所以用 UNIQUE 而不是普通索引：
+--    既加速查询，也把「用户名唯一」从「靠代码检查」变成「数据库保证」。
+--    （入库前已校验：现有 30 个用户无重名，唯一索引可安全建立。）
+CALL add_index_if_missing('lxy_user', 'uk_username', 'UNIQUE KEY `uk_username` (`username`)');
+
+-- ② 商品变更定位：加购物车/下单/推进订单状态都要「按图片路径反查商品 id」。
+--    img_store_path 一个文件对应一件商品，本来就是唯一的（已校验无重复、无 NULL）。
+CALL add_index_if_missing('lxy_product', 'uk_img_path', 'UNIQUE KEY `uk_img_path` (`img_store_path`)');
+
+-- ③ 卖家侧与 JOIN：lxy_product.uid 是 join lxy_user 的连接列，
+--    也是「我发布的商品」页的过滤列。带上 sold_time 让「在售筛选 + 卖家」走同一个索引。
+CALL add_index_if_missing('lxy_product', 'idx_uid_sold', 'KEY `idx_uid_sold` (`uid`, `sold_time`)');
+
+-- ④ 同城 / 同校筛选：这两条 SQL 过滤的是 lxy_user 的地理列与学校列。
+--    有索引后优化器可以从 lxy_user 侧先筛出少量用户，再用 ③ 走 uid 回表找商品；
+--    没有索引时只能从 lxy_product 开始全表扫描 3628 行。
+CALL add_index_if_missing('lxy_user', 'idx_location', 'KEY `idx_location` (`province`, `city`, `area`)');
+CALL add_index_if_missing('lxy_user', 'idx_school',   'KEY `idx_school` (`school`)');
+
+-- ⑤ 按商品查订单：订单页与状态推进都走这个条件，lxy_order 原来没有 product_id 索引。
+CALL add_index_if_missing('lxy_order', 'idx_product', 'KEY `idx_product` (`product_id`)');
+
+-- ⑥ 【刻意不加】lxy_product.sold_time 上的单列索引 —— 结论来自实测，不是想当然：
+--    加上它之后优化器**并没有选它**（执行计划里 key 依旧是 idx_uid_sold），
+--    却把首页那条 SQL 的计划从「扫 lxy_product 3628 行」换成
+--    「扫 29 个用户 × 每用户 62 行 = 1813 行组合」，
+--    优化器自己的估算代价从 514.03 升到 641.22 —— 反而更贵，于是撤掉。
+--    根因是**选择性**：3628 件商品里 3626 件 sold_time 为空（在售），
+--    这个谓词只过滤掉 0.06% 的行，建在这个列上的索引键几乎不携带信息量。
+--    首页真正的解法是**分页**（order by id desc limit N 走主键），
+--    而不是给筛选列建索引 —— 留到 Phase 5 的 DTO/VO 分页一起做。
+--    教训：索引不是越多越好，没被优化器选中的索引只剩写入成本。
 -- 注意：cart_item 不再单独建 idx_user —— 已有的 uk_user_product(user_id, product_id)
 -- 的最左前缀就是 user_id，再建一个纯 user_id 索引属于冗余索引（写入变慢、优化器还要多选一次）。
 
