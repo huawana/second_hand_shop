@@ -25,8 +25,12 @@
 | 校验 | JSR-303 / Hibernate Validator |
 | 测试 | JUnit 5、Mockito、AssertJ |
 
-> **依赖声明但尚未接入的组件：** `spring-boot-starter-data-redis`、`spring-boot-starter-websocket`。
-> 两者都在路线图中有明确落点（Phase 3 缓存体系、Phase 8 IM 私聊），此前属于「引入了但零引用」。
+> **依赖声明但尚未接入的组件：** `spring-boot-starter-websocket`。
+> 它原本留给「IM 私聊」功能，但 2026-09-13 重规划时**已明确砍掉**（与电商主线无关、性价比低），
+> 因此这个依赖属于「引入了但零引用」，可在后续清理时移除 —— **这本身是个可以讲的细节**：
+> 接手项目时先做依赖审计，把「声明了但没人用」的依赖揪出来，而不是继续堆。
+>
+> `spring-boot-starter-data-redis` 已在 Phase 1 收尾真正接入（令牌黑名单 / refresh 存储），不再是空声明。
 
 ---
 
@@ -171,8 +175,8 @@ docs/
 | `lxy_order` | 订单（`condition` 字段记录状态） |
 | `lxy_cart` | 购物车（商品 id 逗号拼接，Phase 2 重构为关联表） |
 | `lxy_admin` | 管理员 |
-| `chat_records` | 私聊消息（**原项目未完成的功能**，Phase 8 补完） |
-| `lxy_mate` | 好友关系（**原项目未完成的功能**，Phase 8 补完） |
+| `chat_records` | 私聊消息（**原项目未完成的功能**；重规划后决定不补，与电商主线无关） |
+| `lxy_mate` | 好友关系（**原项目未完成的功能**；同上，保留表结构不动） |
 | `lxy_product_sale` | 废弃表，无代码引用 |
 
 ---
@@ -357,9 +361,18 @@ CSRF 防护开启并打通表单 / ajax 两条链路；移除 Controller 里用 
 把「文件存储」抽成可切换的实现；业务侧只注入 `FileStorage` 拿 URL，
 上传/删除代码从「自己拼路径、自己建目录、自己删文件」变成一行调用。
 
-**Phase 1 已全部完成。** 下一步：
+**Phase 1 已全部完成。** 后续路线图已按**校招标准**重规划（2026-09-13）：
+砍掉分库分表 / 分布式事务 / 微服务 / ES / IM / 可观测性全家桶，补齐常规电商缺口。
+详见 `docs/ROADMAP.md`。
 
-1. Phase 2：购物车由逗号字符串重构为关联表，引入库存与乐观锁、订单状态机
-2. Phase 3：Redis 缓存体系（令牌存储已在用 Redis，缓存可直接叠加）
-3. Phase 4：下单链路补事务与幂等（当前「先查后改」不是原子操作，存在超卖风险）
-4. Phase 10 之前需处理：上传目录仍在 `src/main/resources`（应外置 + WebMvcConfig 映射）
+1. **Phase 2（必做）**：领域建模 + 常规电商闭环
+   分类 / 库存（乐观锁）/ 购物车关联表 / 订单状态机 + 明细 / 地址 / 评价；
+   引入 MyBatis-Plus（分页、乐观锁、自动填充插件）；索引优化 + `EXPLAIN` 前后对比
+2. **Phase 3（必做）**：Redis 缓存（穿透 / 击穿 / 雪崩 / 一致性）+ Redisson 分布式锁
+3. **Phase 4（必做）**：RabbitMQ 异步下单 + 订单超时取消 + 消费幂等 + 秒杀基础版
+4. **Phase 5（加分）**：Knife4j、AOP 日志与 `@RateLimit`、模拟支付、DTO/VO 分层
+5. **Phase 6（收尾）**：Docker Compose + Nginx + 压测数字 + 面试问答
+
+> 两个待处理的遗留（不急，但被问到要能答）：
+> 上传目录仍在 `src/main/resources`（应外置；starter 已支持改配置，业务代码零改动）；
+> `spring-boot-starter-websocket` 属零引用依赖，可移除。
