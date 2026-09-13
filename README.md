@@ -180,7 +180,13 @@ docs/
 | `lxy_user` | 用户（含省市区、学校，用于按地理/学校筛选） |
 | `lxy_product` | 商品（`sold_time IS NULL` 表示在售） |
 | `lxy_order` | 订单（`condition` 字段记录状态） |
-| `lxy_cart` | 购物车（商品 id 逗号拼接，Phase 2 重构为关联表） |
+| `cart_item` | **购物车明细（Phase 2 起为唯一事实来源）**：`(user_id, product_id, quantity, picked)`，唯一键 `uk_user_product` 保证不重复 |
+| `lxy_cart` | 【兼容层】旧的逗号串购物车表。写路径已切到 `cart_item`，本表由新表**单向投影**维持一致，供尚未迁移的旧读路径使用 |
+| `category` | 商品分类（8 类，Phase 2 新增） |
+| `order_item` | 订单明细（快照商品名与价格，避免商品改价污染历史订单） |
+| `address` | 收货地址（一对多，一对多的替换原来塞在 user 表的省市区） |
+| `review` | 商品评价（唯一键保证一单一件只能评一次） |
+| `payment` | 支付流水（唯一键 `uk_order_no` 是回调幂等的基石） |
 | `lxy_admin` | 管理员 |
 | `chat_records` | 私聊消息（**原项目未完成的功能**；重规划后决定不补，与电商主线无关） |
 | `lxy_mate` | 好友关系（**原项目未完成的功能**；同上，保留表结构不动） |
@@ -265,6 +271,15 @@ fetch('/shop/addToCart', {...})
 - 数据库变更必须同步更新 `docs/schema.sql`，并提供可执行的迁移脚本（如 `docs/migration_phase1.sql`）
 
 ### 🔐 认证与授权（Phase 1 起）
+
+> **⚠️ CSRF 配置里有一行看起来多余、但绝不能删的代码**（Phase 2.3 发现）：
+> `csrf(...).sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())`
+>
+> 不写它，`CsrfConfigurer` 默认追加的 `CsrfAuthenticationStrategy` 会在**每个请求**上触发
+> （因为无状态 + 每请求重新认证 ⇒ `SessionManagementFilter` 每次都认为"发生了新认证"），
+> 于是每次响应都清掉并轮换 CSRF cookie，导致**同一页面上连续第二次写操作必然 403**。
+> 单次操作测不出来，必须连着做两次才会暴露。详见 `docs/ROADMAP.md` 的 Phase 2 报告。
+
 
 - **身份只认 JWT**：`SecurityContext` 由 `JwtAuthenticationFilter` 从 HttpOnly Cookie 或
   `Authorization: Bearer` 头重建。**不要在 Controller 里用 session 判断「谁登录了」** ——

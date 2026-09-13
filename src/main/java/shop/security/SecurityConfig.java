@@ -116,7 +116,31 @@ public class SecurityConfig {
                     CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
                     requestHandler.setCsrfRequestAttributeName("_csrf");
                     csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .csrfTokenRequestHandler(requestHandler);
+                        .csrfTokenRequestHandler(requestHandler)
+                        // ------------------------------------------------------------------
+                        // 【关键修复 · Phase 2.3 发现】禁止 Spring Security 在每次「认证」时轮换 CSRF token。
+                        //
+                        // CsrfConfigurer 默认会向会话认证策略里【追加】一个 CsrfAuthenticationStrategy
+                        // （注意是追加，不是替换）—— 所以上面 sessionManagement 里设置了
+                        // NullAuthenticatedSessionStrategy 也删不掉它，必须在这里单独置空。
+                        //
+                        // 为什么在本项目里必须关掉：
+                        //   本项目是无状态的，每个请求都由 JwtAuthenticationFilter 重新认证；
+                        //   而 SecurityContext 不落 session（SecurityContextRepository 里没有上下文），
+                        //   于是 SessionManagementFilter 每次请求都判定为「发生了新认证」并触发该策略。
+                        //   它的行为是：先 saveToken(null) 清掉 cookie —— 响应头里体现为
+                        //     Set-Cookie: XSRF-TOKEN=; Max-Age=0; Expires=Thu, 01 Jan 1970 ...
+                        //   再生成一个新 token。结果是：
+                        //     1) 浏览器里的 CSRF cookie 被清掉/换掉，而当前页面渲染出的隐藏域还是旧值；
+                        //     2) 用户在这个页面上做第二次写操作（再点一次加入购物车、删除、购买…）
+                        //        必然 403「请求校验失败，请刷新页面后重试」—— 必须刷新页面才能继续。
+                        //   这个轮换在无状态场景下也毫无意义：每次请求都轮换，等于不存在有效基线。
+                        //
+                        // 这个坑很难查：单次操作永远是成功的，只有「连续两次写操作」才复现，
+                        // 而且错误信息会把责任推给用户（"请刷新页面"）。这里在验证脚本里
+                        // 明确加了「连续两次 addToCart 都必须 200」的断言来锁住它。
+                        // ------------------------------------------------------------------
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy());
                 })
 
                 // ------------------------------------------------------------------

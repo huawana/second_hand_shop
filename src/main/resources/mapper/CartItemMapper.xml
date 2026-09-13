@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="shop.admin.mapper.CartItemMapper">
+
+    <!--
+      购物车商品列表：一条 JOIN 取代原来的 N+1。
+      字段列表与 ProductMapper.getProductById 保持一致，这样购物车模板里
+      已经用到的 product.name / price / imgPath / sellerName 等字段无需改动。
+      ORDER BY 用 cart_item 的创建时间（加入购物车的先后），最近加入的排前面。
+    -->
+    <select id="selectCartProducts" resultType="shop.admin.Bean.Product">
+        select p.id,
+               p.name,
+               u.username      as sellerName,
+               p.description,
+               p.price,
+               p.created_at    as createdAt,
+               p.img_store_path as imgPath,
+               p.view_count    as viewCount
+        from cart_item ci
+                 join lxy_product p on p.id = ci.product_id
+                 join lxy_user u on u.id = p.uid
+        where ci.user_id = #{userId}
+        order by ci.created_at desc, ci.id desc
+    </select>
+
+</mapper>

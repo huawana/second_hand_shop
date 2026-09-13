@@ -35,7 +35,7 @@
 |---|---|---|---|
 | Phase 0 修 bug + 工程化地基 | ✅ 已完成 | 2026-09-13 | 见文末「Phase 0 完成报告」 |
 | Phase 1 Spring Boot 3 + Security + JWT | ✅ 已完成 | 2026-09-13 | 1.1–1.8 全部完成（含令牌生命周期、自定义 starter），见文末「Phase 1 完成报告」 |
-| Phase 2 领域建模 + 常规电商闭环 | 🟡 进行中 | — | 2.1 表结构与迁移 ✅（已实测幂等）；2.2 MyBatis-Plus 接入 ✅（分页/乐观锁/自动填充）；2.3 购物车改造起待做 |
+| Phase 2 领域建模 + 常规电商闭环 | 🟡 进行中 | — | 2.1 表结构与迁移 ✅；2.2 MyBatis-Plus 接入 ✅；2.3 购物车关联表改造 ✅（并修掉一个真实 CSRF 缺陷）；2.4 起待做 |
 | Phase 3 Redis 缓存 + 分布式锁 | ⏳ 待开始 | — | **必做** |
 | Phase 4 MQ + 定时任务（含秒杀基础版）| ⏳ 待开始 | — | **必做** |
 | Phase 5 工程化补齐（文档 / AOP / 幂等 / 模拟支付）| ⏳ 待开始 | — | 加分 |
@@ -267,7 +267,8 @@ README 有 `EXPLAIN` 前后对比表、乐观锁与悲观锁的对比结论。
 |---|---|---|
 | 2.1 表结构 + 数据迁移（`docs/schema_v2.sql`）| ✅ | 新增 6 表 + 旧表补 8 列；脚本连跑两次输出逐字节一致（幂等）；购物车逐用户集合 MATCH、订单 28/28 快照零不匹配 |
 | 2.2 MyBatis-Plus 接入 | ✅ | 分页插件实测生效（`total` 来自插件 COUNT、`LIMIT` 偏移正确、`maxLimit=100` 生效、越界返回空）；分类接口 8 类；老 XML Mapper 链路回归全通 |
-| 2.3 cart_item 改造 | ⏳ | — |
+| 2.3 cart_item 改造 | ✅ | 写路径全部切到关联表（加入/移除/结算清理/下架清理）；购物车页由 N+1 改为一条 JOIN；
+  DTO 改名 `CartItem`→`CartItemRequest`；兼容层双向一致性实测通过；**顺带修掉一个真实 CSRF 缺陷**（见下）|
 | 2.4 库存 + 乐观锁/悲观锁 | ⏳ | — |
 | 2.5 订单状态机 + order_item | ⏳ | — |
 | 2.6 索引 EXPLAIN 前后对比 | ⏳ | — |
@@ -283,6 +284,37 @@ README 有 `EXPLAIN` 前后对比表、乐观锁与悲观锁的对比结论。
 **顺手修正（原 Phase 0 遗漏）**
 `GlobalExceptionHandler` 的兜底分支把「请求方法不支持」和「访问不存在的路径」都吞成了 500 ——
 这是客户端错误却被记成服务端故障，会污染错误率与告警。已补 `405`（方法不支持）与 `404`（资源不存在）两个映射。
+
+**🐞 2.3 期间发现并修复的真实缺陷：连续两次写操作必然 403**
+
+> 这是本项目到目前为止**最有价值的一个 bug**：单次操作永远正常，只有「同一页面上连续做两次写操作」
+> 才复现，而且错误信息还把责任推给用户（"请求校验失败，请刷新页面后重试"）。
+> 发现路径本身就值得讲：写 2.3 的验证脚本时，我加了「连续两次 addToCart 都必须成功」的断言，
+> 它立刻挂了 —— 之前的脚本从没这么测过，所以 Phase 1 交付时漏掉了。
+
+| 项 | 内容 |
+|---|---|
+| 现象 | `POST /shop/addToCart` 的响应头里带 `Set-Cookie: XSRF-TOKEN=; Max-Age=0; Expires=Thu, 01 Jan 1970...` —— 服务端把自己的 CSRF cookie 清掉了。浏览器里表现为「点一次加入购物车后再点删除/再点购买 → 403」，必须刷新页面才能继续 |
+| 根因 | Spring Security 的 `CsrfConfigurer` 默认会向会话认证策略里**追加**（不是替换）一个 `CsrfAuthenticationStrategy`。本项目无状态：每个请求都由 JWT 过滤器重新认证，而 SecurityContext 不落 session，于是 `SessionManagementFilter` **每个请求都判定为「发生了新认证」**并触发该策略：先 `saveToken(null)` 清 cookie，再生成新 token。结果 cookie 被清、而页面已渲染的隐藏域还是旧值 → 下一次提交必然失配 |
+| 为什么 Phase 1 没发现 | Phase 1 只在 `sessionManagement` 里设了 `NullAuthenticatedSessionStrategy`，以为已经关掉「每次请求都轮换」；但那条只影响 SessionFixation 部分，CSRF 轮换是 `CsrfConfigurer` 单独追加的，必须单独置空。而 Phase 1 的脚本从没有「连续两次写操作」的用例 |
+| 修法 | `csrf(...).sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())` —— 在 CSRF 配置里显式置空。无状态场景下这个轮换本身也毫无意义（每次都轮换等于不存在有效基线） |
+| 定位手法 | `--logging.level.org.springframework.security=DEBUG` → 日志里出现 `CsrfAuthenticationStrategy - Replaced CSRF Token`；再 `curl -D` 打印响应头看到那条清空 cookie 的 Set-Cookie |
+| 回归锁 | 验证脚本里加了「连续第 2/3 次写操作都必须 200」+「写操作响应不再出现 `XSRF-TOKEN=;`」三条断言，防止将来又被改回去 |
+
+**兼容层（非破坏性迁移的关键）**
+
+写路径已全部切到 `cart_item`，但仍**单向投影**回 `lxy_cart.products` 逗号串：
+
+```
+cart_item（唯一事实来源）  ──全量重写──▶  lxy_cart.products（物化视图，兼容旧读路径）
+```
+
+- 方向单向、全量重写 ⇒ **天然幂等**，不存在两边算不一致的可能（增量维护才会长期漂移）。
+- 代价：现在读路径是**混用**的 —— 购物车页/写路径走新表，「过滤已在购物车的商品」那两处
+  （`UserProcess.getCartList`，被首页与搜索页调用）仍读旧串。因为投影始终一致，所以它们仍然正确。
+- 待办：等读路径也全部迁完，即可删掉兼容层与 `UserProcess` 这个静态工具类（属 Phase 5 工程化）。
+- **验证方式**：脚本用「双向集合相等」两条断言把关（A: 新表每行都能在旧串里找到；B: 旧串每项都能在新表里找到），
+  两条同时成立才算一致 —— 比只比行数可靠得多。
 
 ---
 

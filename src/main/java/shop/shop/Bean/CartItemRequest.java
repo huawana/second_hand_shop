@@ -9,16 +9,16 @@ import jakarta.validation.constraints.NotBlank;
  * 唯一可靠的商品标识就是 img 的 src。这是原始设计的一个缺陷（id 才是主键），
  * Phase 2 会改为传 productId。
  */
-public class CartItem {
+public class CartItemRequest {
 
     // 【新增】参数校验：imgPath 是必填项，缺失时由 GlobalExceptionHandler 统一转成 400 响应
     @NotBlank(message = "商品标识(imgPath)不能为空")
     private String imgPath;
 
-    public CartItem() {
+    public CartItemRequest() {
     }
 
-    public CartItem(String imgPath) {
+    public CartItemRequest(String imgPath) {
         this.imgPath = imgPath;
     }
 

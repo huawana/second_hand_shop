@@ -11,22 +11,19 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import shop.admin.Bean.Cart;
 import shop.admin.Bean.Product;
 import shop.admin.Bean.User;
-import shop.admin.mapper.CartMapper;
 import shop.admin.mapper.OrderMapper;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
 import shop.common.BizException;
 import shop.common.ErrorCode;
 import shop.common.Result;
-import shop.shop.Bean.CartItem;
+import shop.common.service.CartService;
+import shop.shop.Bean.CartItemRequest;
 import shop.shop.tools.SessionCheck;
-import shop.shop.tools.StringToList;
-import shop.shop.tools.UserProcess;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
-import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -35,8 +32,9 @@ public class ShopPersonalController {
 
     @Autowired
     UserMapper userMapper;
+    /** 【Phase 2.3】购物车读写统一走 CartService（切到 cart_item 关联表） */
     @Autowired
-    CartMapper cartMapper;
+    CartService cartService;
     @Autowired
     ProductMapper productMapper;
     @Autowired
@@ -104,22 +102,12 @@ public class ShopPersonalController {
             return "redirect:/shop/login";
         }else{
             m.addAttribute("shopusername", session.getAttribute("shopusername"));
-            int id = userMapper.getIdByUserName((String)session.getAttribute("shopusername"));
-            Cart cart = cartMapper.getCartById(id);
-            List<Product> cartProductList = new ArrayList<>();
-            if (cart != null) {
-                String products = cart.getProducts();
-                List<Integer> idList = StringToList.stringToList(products);
-                // 注意：这里是典型的 N+1 查询（每个商品一条 SQL）。
-                // 商品数量少时无感，Phase 2 会改为 IN 一次批量查询。
-                for (int productid : idList) {
-                    Product cartProduct = productMapper.getProductById(productid);
-                    // 商品可能已被卖家下架，此时查出来是 null，必须跳过，否则模板会 NPE
-                    if (cartProduct != null) {
-                        cartProductList.add(cartProduct);
-                    }
-                }
-            }
+            int userId = userMapper.getIdByUserName((String)session.getAttribute("shopusername"));
+            // 【Phase 2.3 重构】原来是 N+1：把逗号串拆成 id 列表后逐个 getProductById。
+            // 现在一条 JOIN 取回全部展示字段（CartItemMapper.selectCartProducts）。
+            // 顺带简化了一处防御代码：已下架/已删除的商品因为 INNER JOIN 不到 lxy_product
+            // 天然不会出现在结果里，不再需要「查出来是 null 就跳过」。
+            List<Product> cartProductList = cartService.listCartProducts(userId);
             m.addAttribute("cartProduct",cartProductList);
             SessionCheck.checkSessionPosition(session,m);
             SessionCheck.checkSessionSchool(session,m);
@@ -218,7 +206,7 @@ public class ShopPersonalController {
      */
     @PostMapping("/shop/deleteMyRelease")
     @ResponseBody
-    public Result<Boolean> deleteMyRelease(@Valid @RequestBody CartItem cartItem, HttpServletRequest request){
+    public Result<Boolean> deleteMyRelease(@Valid @RequestBody CartItemRequest cartItem, HttpServletRequest request){
         HttpSession session = request.getSession();
         if (SessionCheck.checkSessionName(session)) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
@@ -236,7 +224,9 @@ public class ShopPersonalController {
         }
         log.info("用户[{}]下架商品 id={} name={}", username, productId, product.getName());
         productMapper.deleteProduct(productId);
-        UserProcess.cleanCart(productId);
+        // 【Phase 2.3】原来是 UserProcess.cleanCart(productId)（遍历所有购物车逐个整串写回），
+        // 现在是一条 DELETE ... WHERE product_id = ?（见 CartService.removeProductFromAllCarts）
+        cartService.removeProductFromAllCarts(productId);
         return Result.success(true);
     }
 

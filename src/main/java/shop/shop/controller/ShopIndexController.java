@@ -12,7 +12,7 @@ import shop.admin.Bean.Product;
 import shop.admin.mapper.CartMapper;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
-import shop.shop.Bean.CartItem;
+import shop.shop.Bean.CartItemRequest;
 import shop.shop.mapper.SearchMapper;
 import shop.shop.tools.*;
 
@@ -172,7 +172,7 @@ public class ShopIndexController {
     }
 
 //    @PostMapping("/shop/productDetail")
-//    public String getDetail(@RequestBody CartItem cartItem,HttpServletRequest request, Model m){
+//    public String getDetail(@RequestBody CartItemRequest cartItem,HttpServletRequest request, Model m){
 //        HttpSession session = request.getSession();
 //        SessionCheck.checkSessionName(session);
 //        if (session.getAttribute("shopusername").equals("请登录")) {

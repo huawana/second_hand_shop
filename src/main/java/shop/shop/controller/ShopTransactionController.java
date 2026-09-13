@@ -12,7 +12,7 @@ import shop.admin.mapper.ProductMapper;
 import shop.common.BizException;
 import shop.common.ErrorCode;
 import shop.common.Result;
-import shop.shop.Bean.CartItem;
+import shop.shop.Bean.CartItemRequest;
 import shop.shop.tools.SessionCheck;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,7 +39,7 @@ public class ShopTransactionController {
      */
     @PostMapping("/shop/changeStatus")
     @ResponseBody
-    public Result<Void> changeStatus(@Valid @RequestBody CartItem cartItem, HttpServletRequest request){
+    public Result<Void> changeStatus(@Valid @RequestBody CartItemRequest cartItem, HttpServletRequest request){
         HttpSession session = request.getSession();
         if (SessionCheck.checkSessionName(session)) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
