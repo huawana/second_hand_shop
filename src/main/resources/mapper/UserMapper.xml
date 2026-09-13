@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="shop.admin.mapper.UserMapper">
+    <!-- 【Bug 修复】原 SQL 引用了 #{name} / #{age}，但接口只有 username/phone/email 三个参数，
+         且 lxy_user 表里也没有 name/age 两列 → 后台"编辑用户"必抛 MyBatis BindingException -->
     <update id="updateUserByUserName">
-        update lxy_user set name=#{name}, age=#{age}, email=#{email}, phone=#{phone} where username=#{username}
+        update lxy_user set phone=#{phone}, email=#{email} where username=#{username}
     </update>
     <update id="updateUserLocationByUserName">
         update lxy_user set province=#{province}, city=#{city}, area=#{area} where username=#{username}

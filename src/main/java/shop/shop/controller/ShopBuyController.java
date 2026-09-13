@@ -33,6 +33,10 @@ public class ShopBuyController {
     @ResponseBody
     public Boolean buy(Model m, HttpServletRequest request,@RequestBody CartItem cartItem){
         HttpSession session = request.getSession();
+        // 【Bug 修复】原代码未校验登录，session 里没有 shopusername 时后续取值为 null → NPE
+        if (SessionCheck.checkSessionName(session)) {
+            return false;
+        }
         String imgPath = cartItem.getImgPath();
         int id = productMapper.getIdByImgPath(imgPath);
         System.out.println(id);
@@ -44,6 +48,10 @@ public class ShopBuyController {
     @ResponseBody
     public void buySuccess(Model m, HttpServletRequest request, @RequestBody CartItem cartItem){
         HttpSession session = request.getSession();
+        // 【Bug 修复】原代码未校验登录，未登录时 getIdByUserName(null) 会抛异常
+        if (SessionCheck.checkSessionName(session)) {
+            return;
+        }
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
         String imgPath = cartItem.getImgPath();

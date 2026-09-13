@@ -40,7 +40,9 @@ public class ShopPersonalController {
     @GetMapping("/shop/city")
     public String city(HttpServletRequest request, Model m){
         HttpSession session = request.getSession();
-        if(session.getAttribute("shopusername").equals("请登录")){
+        // 【Bug 修复】原代码直接 session.getAttribute("shopusername").equals(...)，
+        // 首次访问（属性为 null）时抛 NPE。统一走 SessionCheck。
+        if(SessionCheck.checkSessionName(session)){
             return "redirect:/shop/login";
         }else {
             return "/shop/city";

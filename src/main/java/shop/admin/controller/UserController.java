@@ -96,8 +96,10 @@ public class UserController {
             userMapper.updateUserByUserName(username, phone, email);
             return "redirect:/admin/user";
         }catch (Exception e){
-            String id = (String) session.getAttribute("userId");
-            return "redirect:/admin/user_edit/"+id;
+            // 【Bug 修复】:68 处 session 里存的是 int（自动装箱为 Integer），此处强转 String 会抛
+            // ClassCastException，把原本的失败原因掩盖掉。改用 Object 接收。
+            Object uid = session.getAttribute("userId");
+            return "redirect:/admin/user_edit/" + (uid == null ? "" : uid);
         }
     }
 }

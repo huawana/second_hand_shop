@@ -27,6 +27,10 @@ public class AdminController {
             return "redirect:/admin/login";
         }
         Admin admin = adminMapper.getAdmin(adminuser);
+        // 【Bug 修复】原代码未判空，adminuser 不存在时 admin 为 null，下一行直接 NPE
+        if (admin == null) {
+            return "redirect:/admin/admin_edit";
+        }
         if(!Objects.equals(admin.getAdminpass(), MD5passEncryption.encrypt(password))){
             return "redirect:/admin/admin_edit";
         } else if (!Objects.equals(newpass, confirmpass)) {

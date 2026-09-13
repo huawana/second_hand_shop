@@ -70,11 +70,10 @@ public class ShopSaleController {
         if (SessionCheck.checkSessionName(session)) {
             return "redirect:/shop/login";
         }
-        if(session.getAttribute("saleError")=="商品价格必须大于0"){
-            m.addAttribute("saleError","商品价格必须大于0");
-            session.removeAttribute("saleError");
-            return "redirect:/shop/changeProductInformation";
-        }
+        // 【Bug 修复】此处原有一段从 Sale() 复制的 saleError 判断，其中
+        // "redirect:/shop/changeProductInformation" 缺少 {id} 路径变量，而映射只注册了
+        // /shop/changeProductInformation/{id} → 必然 404。且 changeProduct(POST) 根本不会
+        // 写入 saleError（该属性只属于 /shop/sale 上传流程），这段是永不成立的死代码，直接删除。
         String username = (String)session.getAttribute("shopusername");
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);

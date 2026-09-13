@@ -43,13 +43,17 @@ public class ShopCartController {
         Iterator<Integer> iterator = numList.iterator();
         while (iterator.hasNext()) {
             Integer num = iterator.next();
-            if (num == productId) {
+            // 【Bug 修复】原为 num == productId（Integer 与 int 比较，依赖自动拆箱才勉强正确），
+            // 语义上应显式按值比较。注意 Integer 的 -128~127 缓存：== 只在缓存区间内"碰巧"成立。
+            if (num.equals(productId)) {
                 iterator.remove();
             }
         }
         String newProductList = StringToList.listToString(numList);
         cartMapper.updateCartProducts(id,newProductList);
-        return "/shop/cart";
+        // 【Bug 修复】原为 return "/shop/cart"（转发），但本方法没有往 Model 里放 cartProduct，
+        // 模板渲染时拿不到数据。改为重定向，由 GET /shop/cart 重新装配数据。
+        return "redirect:/shop/cart";
     }
 
 

@@ -129,13 +129,18 @@ public class SearchProcess {
 
         List<Product> productAllList = productMapper.getProducts(username);
         UserProcess.removeCartElementFromProducts(productAllList,cartList);
-        Random random = new Random();
-        while (number-nowValue > 0) {
-            int index = random.nextInt(productAllList.size());
-            Product product = productAllList.get(index);
+        // 【Bug 修复】原实现用 while + random 补位，有两个缺陷：
+        //   1) productAllList 为空时 random.nextInt(0) 抛 IllegalArgumentException
+        //   2) 候选项全部已存在于 productList 时 number 永不递减 → 死循环
+        // 改为打乱后顺序补齐，循环次数有确定上界，且空列表自然跳过。
+        Collections.shuffle(productAllList);
+        for (Product product : productAllList) {
+            if (number - nowValue <= 0) {
+                break;
+            }
             if (!productList.contains(product)) {
                 productList.add(product);
-                number -= 1;
+                nowValue += 1;
             }
         }
 

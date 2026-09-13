@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商城后台管理系统</title>
+  <link rel="stylesheet" type="text/css" href="/admin/assets/css/common.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+      <div class="logo">电子商城</div>
+      <hr>
+      <div class="menu">
+        <ul>
+          <li id="admin">
+            <a href="/admin/admin">
+              <img src="/admin/assets/img/admin1.png">
+              <label>控制台</label>
+            </a>
+          </li>
+          <li id="user">
+            <a href="/admin/user">
+              <img src="/admin/assets/img/user1.png">
+              <label>用户管理</label>
+            </a>
+          </li>
+          <li id="product">
+            <a href="/admin/product">
+              <img src="/admin/assets/img/product1.png">
+              <label>商品管理</label>
+            </a>
+          </li>
+          <li id="order">
+            <a href="/admin/order">
+              <img src="/admin/assets/img/order1.png">
+              <label>订单管理</label>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <!-- 主内容区 -->
+    <div class="main">
+      <!-- 导航条 -->
+      <div class="nav">
+        <div class="nav_brand">控制台</div>
+        <div class="nav_bar">
+          <ul>
+            <li id="useritem">
+              <img src="assets/img/user1.png">
+              <ul id="drop_menu">
+                <li><a href="/admin/admin_edit">编辑</a></li>
+                <li><a href="/admin/logout">退出</a></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <!-- nav结束 -->
+      <!-- 内容区 -->
+      <div class="content">
+        <div class="table_card">
+          <div class="table_desc">
+            <div class="desc1">添加商品</div>
+            <div class="desc2">
+              <a href="/admin/product">返回商品列表</a>
+            </div>
+          </div>
+          <!-- 操作结果提示 -->
+          <div th:if="${result != null}" th:text="${result}"
+               style="color:#c0392b;padding:0 0 12px 24px;"></div>
+          <div class="form">
+            <!-- enctype 必须为 multipart/form-data，否则图片文件不会随表单提交 -->
+            <form action="/admin/product_add" method="post" enctype="multipart/form-data">
+              <div class="edit3">
+                <p>商品名称</p>
+                <input class="edit" type="text" name="name" value="" required>
+              </div>
+              <div class="edit3">
+                <p>价格</p>
+                <input class="edit" type="number" name="price" value="" step="0.01" min="0.01" required>
+              </div>
+              <div class="clear"></div>
+              <div class="edit1">
+                <p>卖家</p>
+                <select class="edit" name="sellerUsername" required>
+                  <option value="">请选择卖家</option>
+                  <option th:each="u:${users}"
+                          th:value="${u.username}"
+                          th:text="${u.username}"></option>
+                </select>
+              </div>
+              <div class="edit1">
+                <p>商品图片</p>
+                <input class="edit" type="file" name="image" accept="image/png,image/jpeg" required>
+              </div>
+              <div class="edit3" style="width:100%;">
+                <p>商品描述</p>
+                <input class="edit" type="text" name="description" value="">
+              </div>
+              <div class="clear"></div>
+              <input class="button" type="submit" name="submit" value="添加商品">
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+<script type="text/javascript" src="/admin/assets/JS/common.js"></script>
+</html>

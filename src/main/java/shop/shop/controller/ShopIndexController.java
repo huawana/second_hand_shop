@@ -37,7 +37,9 @@ public class ShopIndexController {
         HttpSession session = request.getSession();
         if(SessionCheck.checkSessionName(session)){
             List<Product> productList = productMapper.getProducts("");
-            m.addAttribute("products", productList.subList(0,100));
+            // 【Bug 修复】原为 subList(0,100)，商品不足 100 条时抛 IndexOutOfBoundsException。
+            // 已登录分支（下方 :49）本来就用了 Math.min，这里保持一致。
+            m.addAttribute("products", productList.subList(0, Math.min(productList.size(), 100)));
         }else{
             String username = (String) session.getAttribute("shopusername");
             int id = userMapper.getIdByUserName(username);
