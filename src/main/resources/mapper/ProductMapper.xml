@@ -11,6 +11,16 @@
     <update id="updateProductViewCount">
         update lxy_product set view_count = #{viewCount} where id = #{id}
     </update>
+    <!-- 【Phase 3.2】原子自增：把「读-改-写」压成一条语句，避免并发下丢失浏览数。
+         注意区别：上面那条是「写入指定值」（原项目的写法，两个并发请求会互相覆盖），
+         这条是「在当前值上加一」（数据库层保证原子性）。 -->
+    <update id="increaseViewCount">
+        update lxy_product set view_count = view_count + 1 where id = #{id}
+    </update>
+    <!-- 【Phase 3.4】布隆过滤器启动装载用：只取主键，可走覆盖索引 -->
+    <select id="getAllProductIds" resultType="java.lang.Integer">
+        select id from lxy_product
+    </select>
     <update id="updateSellTimeById">
         update lxy_product set sold_time = NOW() where id = #{id}
     </update>

@@ -15,6 +15,7 @@ import shop.admin.mapper.UserMapper;
 import shop.shop.Bean.CartItemRequest;
 import shop.shop.mapper.SearchMapper;
 import shop.shop.tools.*;
+import shop.common.cache.ProductCacheService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -31,6 +32,9 @@ public class ShopIndexController {
     CartMapper cartMapper;
     @Autowired
     UserMapper userMapper;
+    /** 【Phase 3.2】商品详情读缓存 */
+    @Autowired
+    ProductCacheService productCacheService;
     @GetMapping("/shop/index")
     public String shopIndex(Model m, HttpServletRequest request) {
 //        DailyUpdateTask.performUpdate();
@@ -212,10 +216,25 @@ public class ShopIndexController {
         m.addAttribute("shopusername", session.getAttribute("shopusername"));
         SessionCheck.checkSessionPosition(session,m);
         SessionCheck.checkSessionSchool(session,m);
-        Product product = productMapper.getProductById(id);
 
-        productMapper.updateProductViewCount(id,product.getViewCount()+1);
-        m.addAttribute("product",product);
+        // 【Phase 3.2】商品查询改走缓存（Cache-Aside，见 ProductCacheService）：
+        // 原来是「查一次 JOIN 查询 → 再更新浏览数」，现在商品信息由缓存挡住，
+        // 只有缓存未命中（或按 TTL 过期后第一次访问）才会真正执行那条带 JOIN 的 SQL。
+        Product product = productCacheService.getById(id);
+        // 【顺带修掉一个空指针】原代码紧接着就调用 product.getViewCount()，
+        // 传入不存在的 id（例如手敲一个 /shop/productDetail/999999）会直接 NPE → 500。
+        // 现在不存在的商品一律回首页，语义上比 500 正确。
+        if (product == null) {
+            return "redirect:/shop/index";
+        }
+
+        // 浏览数不进缓存，走数据库原子自增（一条 update，不做读-改-写）。
+        // 页面展示「缓存值 + 1」：库里的是精确值，页面允许偏小 ——
+        // 若为了这一个数字每次访问都删缓存，缓存就白做了，详见 ProductCacheService 的类注释。
+        productMapper.increaseViewCount(id);
+        product.setViewCount(product.getViewCount() + 1);
+
+        m.addAttribute("product", product);
         return "shop/productDetail";
     }
 }

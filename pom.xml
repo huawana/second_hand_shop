@@ -33,6 +33,9 @@
         <!-- 【Phase 2】MyBatis-Plus（Boot 3 专用 starter 坐标，不是 mybatis-plus-boot-starter） -->
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <!-- 【Phase 3.4/3.8】Redisson 3.x 的最后一个小版本：稳定、文档全、API 未被 4.x 改名
+             （4.x 面向 Spring Boot 4 / 更新的 Java 基线，本项目不跟）。 -->
+        <redisson.version>3.52.0</redisson.version>
     </properties>
 
     <dependencies>
@@ -129,6 +132,16 @@
             <!-- Phase 3：商品缓存 / 分布式锁 / 限流 -->
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Phase 3.4 / 3.8：Redisson。
+                 只引核心包，不引 redisson-spring-boot-starter —— 后者会替换 Boot 自动配置的
+                 RedisConnectionFactory（把 Lettuce 换掉），而 Phase 1 的令牌存储与 Phase 3.1 的
+                 RedisTemplate 都建立在它之上。两套客户端并存、各管一段，是这里刻意的选择。
+                 好处：RLock 的看门狗续期与可重入、RBloomFilter 的原子位设置，都不用自己写 Lua。 -->
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+            <version>${redisson.version}</version>
         </dependency>
         <dependency>
             <!-- Phase 8：IM 私聊（原项目遗留的 chat_records / lxy_mate 表正好用上） -->

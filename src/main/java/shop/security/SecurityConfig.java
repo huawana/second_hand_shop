@@ -58,6 +58,12 @@ public class SecurityConfig {
             // 刻意逐条列出而不用 "/shop/api/**" 通配：将来新增的写接口不会因为
             // 一个宽通配符被顺手放行 —— 放行范围要「最小可用」，这是安全默认值。
             "/shop/api/categories", "/shop/api/categories/*",
+            // ---- 【Phase 3】商品缓存接口：只读（详情 / 诊断统计），同样属于公开信息 ----
+            // 注意 /shop/api/products/** 只暴露「读商品」，不含下单 —— 下单仍在
+            // AUTHENTICATED_PATHS 里（/shop/buy、/shop/buySuccess），不要顺手把它们并进来。
+            "/shop/api/products/**",
+            // 缓存统计（命中率/耗时）不含任何用户数据，放行以便压测与运维直接读
+            "/shop/api/cache/stats",
             // ---- 后台入口 ----
             "/admin/login", "/admin/loginResult"
     };
