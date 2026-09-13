@@ -1,15 +1,42 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="shop.admin.mapper.OrderMapper">
-    <insert id="insertNewOrder">
-        insert into lxy_order(product_id,sell_uid,buy_uid,created_at,`condition`) values(#{productId},#{sellUid},#{buyUid},NOW(),#{condition})
+
+    <!--
+      Phase 2.5：原来的 insertNewOrder 只写 (product_id, sell_uid, buy_uid, condition)，
+      缺 order_no / status / total_amount / pay_time，且中文 condition 被当成状态码使用。
+      新增本语句：写全字段，并让数据库把自增 id 回填到 PO 上（供写订单明细使用）。
+      注意：order_no 由应用层生成（见 OrderService），对外展示用它，不暴露自增 id。
+    -->
+    <insert id="insertOrder" parameterType="shop.admin.Bean.OrderPO"
+            useGeneratedKeys="true" keyProperty="id">
+        insert into lxy_order(order_no, product_id, sell_uid, buy_uid, created_at,
+                              `condition`, status, total_amount, pay_time)
+        values (#{orderNo}, #{productId}, #{sellUid}, #{buyUid}, IFNULL(#{createdAt}, NOW()),
+                #{condition}, #{status}, #{totalAmount}, #{payTime})
     </insert>
-    <update id="updateOrderStatusById">
-        update lxy_order set `condition` = #{status} where product_id = #{id}
+
+    <select id="selectStatusById" resultType="java.lang.String">
+        select status from lxy_order where id = #{id}
+    </select>
+
+    <!--
+      状态机推进：where 里带旧状态条件。
+      影响行数为 0 = 「这单已经不在你以为的状态了」，可能是别人先推进了，也可能是状态非法。
+      两种情况的处理方式相同：拒绝本次操作并让调用方重新读取最新状态。
+    -->
+    <update id="updateStatusConditionally">
+        update lxy_order
+        set status    = #{to},
+            `condition` = #{legacy}
+        where id = #{id}
+          and status = #{from}
     </update>
+
     <delete id="deleteOrderById">
         delete from lxy_order where id=#{id}
     </delete>
+
     <select id="getOrders" resultType="shop.admin.Bean.Order">
         SELECT s.id,s.productName,s.sellerName,b.buyerName,s.createdAt,s.`condition` FROM
         (select o.id AS id,p.`name` AS productName,u.username AS sellerName,o.created_at AS createdAt,o.`condition` AS `condition` from lxy_order o join lxy_product p join lxy_user u where o.sell_uid=u.id and o.product_id=p.id) s JOIN
@@ -29,12 +56,17 @@
                s.username      as sellerName,
                b.username      as buyerName,
                o.created_at    as createdAt,
-               o.`condition`   as `condition`
+               o.`condition`   as `condition`,
+               o.status        as status
         from lxy_order o
                  left join lxy_product p on p.id = o.product_id
                  left join lxy_user s on s.id = o.sell_uid
                  left join lxy_user b on b.id = o.buy_uid
         where o.product_id = #{id}
+        -- 同一商品理论上只有一单（一物一件），但加排序可让结果确定，
+        -- 避免将来出现重复数据时「有时取到这一单、有时取到那一单」
+        order by o.id desc
+        limit 1
     </select>
     <select id="getOrderById" resultType="shop.admin.Bean.Order">
         select * from lxy_order where id=#{id}

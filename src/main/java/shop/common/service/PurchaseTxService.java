@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import shop.admin.mapper.OrderMapper;
 import shop.admin.mapper.ProductMapper;
 import shop.common.BizException;
 import shop.common.ErrorCode;
@@ -29,14 +28,14 @@ public class PurchaseTxService {
     private static final Logger log = LoggerFactory.getLogger(PurchaseTxService.class);
 
     private final StockDeductStrategy stockDeductStrategy;
-    private final OrderMapper orderMapper;
+    private final OrderService orderService;
     private final ProductMapper productMapper;
 
     public PurchaseTxService(StockDeductStrategy stockDeductStrategy,
-                             OrderMapper orderMapper,
+                             OrderService orderService,
                              ProductMapper productMapper) {
         this.stockDeductStrategy = stockDeductStrategy;
-        this.orderMapper = orderMapper;
+        this.orderService = orderService;
         this.productMapper = productMapper;
     }
 
@@ -57,7 +56,9 @@ public class PurchaseTxService {
             // 抛出以回滚事务（同时释放可能持有的行锁），由外层换一个新事务重试
             throw new StockConflictException("库存版本冲突 productId=" + productId);
         }
-        orderMapper.insertNewOrder(productId, sellerId, buyerId, "等待发货");
+        // 【Phase 2.5】建单交给 OrderService：写全字段（order_no / status / total_amount / pay_time）
+        // 并同步写入订单明细快照（商品名与价格），不再只写 4 个字段 + 一个中文状态串
+        orderService.createOrder(productId, sellerId, buyerId);
         productMapper.updateSellTimeById(productId);
         log.info("购买成功 productId={} buyerId={} 策略={}", productId, buyerId, stockDeductStrategy.name());
     }

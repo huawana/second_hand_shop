@@ -271,6 +271,31 @@ fetch('/shop/addToCart', {...})
 - **不要提交 `target/`、`logs/`、`.idea/`**（已在 `.gitignore`）
 - 数据库变更必须同步更新 `docs/schema.sql`，并提供可执行的迁移脚本（如 `docs/migration_phase1.sql`）
 
+### 📦 订单状态机与明细（Phase 2.5 起）
+
+订单状态用枚举 + 显式流转表定义，而不是散在流程代码里的 if/else：
+
+```
+PENDING_PAY(待支付) ──► PAID(等待发货) ──► SHIPPED(已发货) ──► COMPLETED(订单已完成)
+        │                    │
+        └────────────────────┴──► CANCELLED(已取消)         COMPLETED / CANCELLED 为终态
+```
+
+- **旧中文文案双写**：数据库里 `condition` 仍被既有页面使用，状态机推进时同步写
+  `status`（枚举名）与 `condition`（中文），过渡期结束后只需删掉旧列。
+- **非法流转与并发都靠一条 SQL 拦住**：
+
+  ```sql
+  update lxy_order set status = ?, `condition` = ?
+   where id = ? and status = ?    -- 影响行数 0 表示状态已变，拒绝本次操作
+  ```
+
+  把「检查」放进 WHERE 而不是「先查再改」—— 后者在并发下两个请求会同时通过检查。
+- **订单明细存快照**：`order_item` 保存下单瞬间的商品名与价格。订单是历史凭证，
+  卖家之后改名/改价不能影响历史订单，所以不能展示时再 JOIN 商品表。
+- **对外只暴露业务订单号** `SO + yyyyMMddHHmmssSSS + 4 位随机`，不暴露自增 id
+  （自增 id 会泄漏业务量、也便于被遍历探测）；唯一性由唯一索引兜底。
+
 ### 🧮 库存与并发（Phase 2.4 起）
 
 二手商品一物一件，最典型的并发问题是**超卖**：两个人同时买同一件，
