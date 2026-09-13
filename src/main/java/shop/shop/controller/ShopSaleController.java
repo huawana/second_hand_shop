@@ -14,6 +14,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import shop.admin.Bean.Product;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
+import shop.common.cache.CacheInvalidator;
+import shop.common.cache.ProductBloomFilter;
 import shop.shop.tools.SessionCheck;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,6 +37,14 @@ public class ShopSaleController {
      */
     @Autowired
     FileStorage fileStorage;
+
+    /** 【Phase 3.4】新增商品后要告知布隆过滤器 */
+    @Autowired
+    ProductBloomFilter productBloomFilter;
+
+    /** 【Phase 3.7】改完商品后删缓存（含延迟双删） */
+    @Autowired
+    CacheInvalidator cacheInvalidator;
 
     @PostMapping("/shop/uploadProduct")
     public String uploadProduct(HttpServletRequest request, Model m, @RequestParam("image") MultipartFile image, @RequestParam("name") String name, @RequestParam("price") double price, @RequestParam("description") String description){
@@ -65,7 +75,13 @@ public class ShopSaleController {
         String fileName = String.valueOf(nowId == null ? 1 : nowId + 1) + ".png";
         String imgPath = fileStorage.store(image, fileName);
         productMapper.uploadProduct(name,uid,description,price,imgPath);
-        log.info("用户[{}]发布商品 name={} price={} file={}", username, name, price, fileName);
+        // 【Phase 3.4】新增商品后必须主动告知布隆过滤器，否则新商品的 id 会被判成「一定不存在」，
+        // 详情页直接 404。见 ProductBloomFilter 类注释的「新增必须主动告知」。
+        Integer newId = productMapper.getNowId();
+        if (newId != null) {
+            productBloomFilter.add(newId);
+        }
+        log.info("用户[{}]发布商品 name={} price={} file={} newId={}", username, name, price, fileName, newId);
         return "redirect:/shop/index";
 
     }
@@ -122,6 +138,10 @@ public class ShopSaleController {
         if(image == null || image.isEmpty()){
             // 未上传新图片：沿用原图路径
             productMapper.updateProduct(name,description,price,origin.getImgPath());
+            // 【Phase 3.7】先更库、再删缓存（这条 mapper 调用是自动提交的，返回即已落库）。
+            // 用 CacheInvalidator 而不是直接 delete：它还会补一次延迟删除，
+            // 处理「读请求在删缓存前读到旧值、删缓存后才回写」的竞态，见其类注释。
+            cacheInvalidator.evictProduct(id);
         }else{
             // 【Bug 修复】原代码 new File(imgPath) 直接把 URL 当磁盘路径用。
             // imgPath 形如 "/shop/assets/product-img/123.png"，会被解析成「当前工作目录下的
@@ -139,6 +159,8 @@ public class ShopSaleController {
             // 这里统一：文件名 = {id}.png，并把 store() 返回的同一个值写回数据库。
             String newImgPath = fileStorage.store(image, id + ".png");
             productMapper.updateProduct(name,description,price, newImgPath);
+            // 【Phase 3.7】换了图片也要失效缓存，否则详情页会一直显示旧图（浏览器缓存的 imgPath 是旧的）
+            cacheInvalidator.evictProduct(id);
         }
         log.info("用户[{}]修改商品 id={} name={} price={}", username, id, name, price);
         return "redirect:/shop/personRelease";

@@ -15,6 +15,8 @@ import shop.admin.Bean.Product;
 import shop.admin.Bean.User;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
+import shop.common.cache.CacheInvalidator;
+import shop.common.cache.ProductBloomFilter;
 import shop.security.CurrentUser;
 
 import java.util.List;
@@ -32,6 +34,14 @@ public class ProductController {
     /** 【Phase 1 收尾】文件存储由自定义 starter 自动配置注入（与前台共用同一套封装） */
     @Autowired
     FileStorage fileStorage;
+
+    /** 【Phase 3.4】新增商品后要告知布隆过滤器 */
+    @Autowired
+    ProductBloomFilter productBloomFilter;
+
+    /** 【Phase 3.7】商品删除/变更后删缓存 */
+    @Autowired
+    CacheInvalidator cacheInvalidator;
 
     // 鉴权由安全层统一负责（URL 规则 + 类级 @PreAuthorize，均基于 JWT），不再自行判 session
     @GetMapping("/admin/product")
@@ -78,7 +88,12 @@ public class ProductController {
                 String fileName = String.valueOf(nowId + 1) + ".png";
                 String imgPath = fileStorage.store(image, fileName);
                 productMapper.uploadProduct(name, seller.getId(), description, price, imgPath);
-                log.info("管理员新增商品 name={} seller={} file={}", name, sellerUsername, fileName);
+                // 【Phase 3.4】告知布隆过滤器，否则新商品会被判成「一定不存在」而查不到
+                Integer newId = productMapper.getNowId();
+                if (newId != null) {
+                    productBloomFilter.add(newId);
+                }
+                log.info("管理员新增商品 name={} seller={} file={} newId={}", name, sellerUsername, fileName, newId);
                 m.addAttribute("result", "添加商品成功");
             } catch (Exception e) {
                 log.error("添加商品失败 name={} seller={}", name, sellerUsername, e);
@@ -93,6 +108,10 @@ public class ProductController {
     public String productDelete(@PathVariable("id") int id,Model m){
         try{
             productMapper.deleteProduct(id);
+            // 【Phase 3.7】删除商品后必须失效缓存，否则「已经删掉的商品」还能从缓存里读出来。
+            // 注意布隆过滤器无法删除元素（见 ProductBloomFilter），所以删掉的 id 仍会被判为
+            // 「可能存在」→ 多一次查库 → 查不到 → 写空值缓存。功能正确，代价可以接受。
+            cacheInvalidator.evictProduct(id);
             log.info("管理员删除商品 id={}", id);
             m.addAttribute("result","删除商品成功");
             return "redirect:/admin/product";
