@@ -1,8 +1,8 @@
 package shop.admin.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import com.example.oss.FileStorage;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +16,6 @@ import shop.admin.Bean.User;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
 import shop.security.CurrentUser;
-import shop.shop.tools.ProductPictureProcess;
 
 import java.util.List;
 
@@ -30,8 +29,9 @@ public class ProductController {
     @Autowired
     UserMapper userMapper;
 
-    @Value("${upload.path}")
-    private String uploadPath;
+    /** 【Phase 1 收尾】文件存储由自定义 starter 自动配置注入（与前台共用同一套封装） */
+    @Autowired
+    FileStorage fileStorage;
 
     // 鉴权由安全层统一负责（URL 规则 + 类级 @PreAuthorize，均基于 JWT），不再自行判 session
     @GetMapping("/admin/product")
@@ -76,9 +76,8 @@ public class ProductController {
                 // 另外 getNowId() 在空表时返回 null，拆箱会抛 NPE（同样在 Phase 6 一并处理）。
                 int nowId = productMapper.getNowId();
                 String fileName = String.valueOf(nowId + 1) + ".png";
-                ProductPictureProcess.saveFile(sellerUsername, image, uploadPath + fileName);
-                productMapper.uploadProduct(name, seller.getId(), description, price,
-                        "/shop/assets/product-img/" + fileName);
+                String imgPath = fileStorage.store(image, fileName);
+                productMapper.uploadProduct(name, seller.getId(), description, price, imgPath);
                 log.info("管理员新增商品 name={} seller={} file={}", name, sellerUsername, fileName);
                 m.addAttribute("result", "添加商品成功");
             } catch (Exception e) {

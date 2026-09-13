@@ -15,7 +15,7 @@
 | Phase | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
 | Phase 0 修 bug + 工程化地基 | ✅ 已完成 | 2026-09-13 | 见文末「Phase 0 完成报告」 |
-| Phase 1 Spring Boot 3 + Security + JWT | 🟡 收尾中 | 2026-09-13 | 1.1–1.7 + 令牌生命周期（黑名单/refresh/重放检测）已完成；仅剩 1.8 自定义 starter，见文末「Phase 1 完成报告」 |
+| Phase 1 Spring Boot 3 + Security + JWT | ✅ 已完成 | 2026-09-13 | 1.1–1.8 全部完成（含令牌生命周期、自定义 starter），见文末「Phase 1 完成报告」 |
 | Phase 2 领域建模重构 | ⏳ 待开始 | — | |
 | Phase 3 Redis 缓存体系 | ⏳ 待开始 | — | |
 | Phase 4 高并发秒杀 | ⏳ 待开始 | — | |
@@ -1249,5 +1249,128 @@ Phase 1 安全面 32 项断言：PASS=32  FAIL=0
 | patch 的模糊匹配吃掉相邻行 | changePass 丢了 `return`、logout 丢了 `session` 声明与 `removeAttribute("shopusername")` | 改为精确字符串替换 + 断言「关键语句仍在」；编译/回归分别验证 |
 | `redis-cli --scan` 无输出（本机 5.0.14.1 Windows） | 计数断言恒为 0，且清理 trap 静默失效、db3 残留 key | 测试脚本一律改用 `keys`；redis-cli 输出带 CRLF，用前必须 `tr -d '\r'` |
 | 断言把证据标记算成存活令牌 | `shop:rt:*` 也匹配 `shop:rt:used:*` | 统计存活令牌时排除 `:used:` / `:grace:`，并把剩余 key 打印出来便于核对 |
+
+---
+
+# Phase 1 收尾 — 自定义 Starter（2026-09-13，考点 16）
+
+**交付：** `oss-spring-boot-starter`（独立 Maven 工程，`com.example:oss-spring-boot-starter:1.0.0`）
+
+## 做了什么
+
+把「文件上传」从业务代码里抽出来，做成一个**自动配置的 starter**：
+业务侧只注入 `FileStorage`，调用 `store(file, key)` 拿回一个 URL、调用 `delete(url)` 清理旧图。
+上传/删除相关的「拼路径、建目录、防穿越、删文件」全部收敛到实现类里。
+
+| 类 | 职责 |
+|---|---|
+| `OssAutoConfiguration` | `@AutoConfiguration` + `@ConditionalOnProperty` + `@ConditionalOnMissingBean` |
+| `OssProperties` | `oss.*` 配置绑定；含 URL 前缀的规范化容错 |
+| `FileStorage` | 对外契约：`store` / `delete`，**以 URL 为交互单位**（业务方不需要知道文件在哪） |
+| `LocalFileStorage` | 本地实现：路径穿越防护、目录自动创建、异常带根因 |
+| `META-INF/spring/...AutoConfiguration.imports` | Boot 3 的自动配置注册（SPI） |
+
+## 关键设计决策（面试可讲）
+
+### 1. 一个 starter 由两部分组成，但包名必须独立
+
+`autoconfigure`（自动配置 + 配置类）+ `starter`（依赖聚合）。本项目体量小，两者做进同一个 jar，
+但包名用独立的 `com.example.oss`，**刻意不放进业务包 `shop.*`** ——
+starter 是给别的项目复用的，一旦它反过来依赖业务代码就失去了复用性。
+
+### 2. 依赖全部标 `optional`
+
+starter 的职责是「补充」而不是「强加」。它只在消费方已有 Spring Boot / Spring Web 时工作，
+不该把 Spring 全家桶再传递一遍 —— 那会引发版本冲突，也是新手写 starter 最容易犯的错。
+
+### 3. 自动配置必须让位给用户配置（`@ConditionalOnMissingBean`）
+
+消费方只要自己声明一个 `FileStorage` Bean，自动配置就不再创建。
+「约定优于配置」能被接受的前提就是**框架不夺权**，这是所有官方 starter 的规则。
+
+### 4. Boot 2 与 Boot 3 的注册方式差异（高频考点）
+
+- Boot 2.7 之前：`META-INF/spring.factories` 里写 `EnableAutoConfiguration=...`
+- Boot 2.7 起废弃，**Boot 3 完全改用** `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
+
+本项目用后者。
+
+### 5. 接口以 URL 为交互单位，而不是文件路径
+
+业务代码要的是「能存库、能渲染进 `img src` 的地址」，介质是磁盘还是对象存储属于实现细节。
+`delete(String publicUrl)` 接收 URL 才能让各实现自行解析：本地按前缀截相对路径、
+云实现按 objectKey 调 SDK，而**调用方始终只有一行**。
+
+### 6. 不预写没有实现也没有测试的「云存储实现」
+
+ROADMAP 原计划是「本地 / OSS / MinIO 三实现切换」。实际只落地 `local` ——
+因为 MinIO/OSS 在此环境没有可运行的服务端，写了也无法验证，
+等于把「未验证的代码」混进简历项目。类注释里留了新增实现的完整写法与条件放宽提醒，真要接时再补。
+
+## 验证证据（实测）
+
+**starter 单元测试（11 个）**
+```
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0    BUILD SUCCESS
+```
+覆盖：落盘与 URL 拼接、目录自动创建、子目录与分隔符归一化、**路径穿越被拒**、
+空文件/空 key 拒绝、按 URL 删除、删除幂等、不删非本存储 URL、URL 前缀容错（缺首尾斜杠）。
+
+**集成端到端（12 项断言）**
+```
+PASS=12  FAIL=0
+```
+用**非默认配置**启动（`--oss.local-dir` 指到临时目录、`--oss.url-prefix=/custom-upload/`），
+然后真实上传一张图，断言：
+
+| 断言 | 说明 |
+|---|---|
+| starter jar 是普通 jar（无 `BOOT-INF`） | 打成 fat jar 会让消费方加载不到类，是 starter 最经典的坑 |
+| 含 `AutoConfiguration.imports` | 否则自动配置根本不会被加载 |
+| 上传返回 200 | 链路通 |
+| DB 里是 `/custom-upload/3668.png` | **配置贯穿到了业务代码**，不是「碰巧没报错」 |
+| 文件落在自定义目录 | `@ConfigurationProperties` 真的生效 |
+| 默认图片目录未被写入（仍 3665 张） | 确实切走了，不是双写 |
+| 无残留测试数据 | 清理干净 |
+
+**回归（确认没影响既有能力）**
+```
+Phase 0 端到端 56 项断言：PASS=56  FAIL=0（含走 starter 的 multipart 上传）
+Phase 1 安全面 32 项断言：PASS=32  FAIL=0
+令牌生命周期 38 项断言：PASS=38  FAIL=0
+应用单测 55 + starter 单测 11 = 66 个全绿
+数据完整性：商品 3659 / 用户 30 / 订单 28 / 购物车 29，图片 3665
+```
+
+## 面试可用话术
+
+> 「我把文件上传抽成了一个自定义 starter。消费方往依赖里加一行，
+> 就能直接注入 `FileStorage` 用，不需要写任何 `@Configuration`。
+>
+> 关键是三个注解的配合：`@AutoConfiguration` 配合 Boot 3 的
+> `AutoConfiguration.imports` 做注册（Boot 2 用的是 `spring.factories`，3.0 之后改了，
+> 这是常被问到的版本差异）；`@ConditionalOnProperty` 决定装哪个实现；
+> `@ConditionalOnMissingBean` 保证用户自己声明了 Bean 时框架让位 ——
+> 没有这一条，「自动配置」就会变成「框架夺权」，没人敢用。
+>
+> 接口我设计成以 URL 为交互单位而不是文件路径：业务只关心拿到一个能渲染的地址，
+> 所以删除也接收 URL，本地实现截相对路径、云实现调 SDK 删，
+> 调用方在两种介质下都是同一行代码。
+>
+> 另外我把依赖全标了 optional，starter 不该把 Spring 全家桶再传递一遍。
+> 还有个容易忽略的验证点：starter 必须是普通 jar，**不能**被 boot 插件打成 fat jar，
+> 否则消费方拿到 BOOT-INF 结构，类根本加载不到 —— 我在验证脚本里专门断言了这一条。」
+
+## 本阶段踩的坑（记录）
+
+| 坑 | 现象 | 处理 |
+|---|---|---|
+| 把 MSYS 路径传给 java | `--oss.local-dir=/c/Users/...` 被 java 解释成 `C:\c\Users\...`，文件写到凭空多出来的目录里 | 传给 java 的路径用 `cygpath -w` 转成 Windows 风格（**curl 相反，必须相对路径**，两个工具要求不同） |
+| 抓 CSRF token 时漏了 `-c` | 页面隐藏域里是**轮换后**的新 token，jar 里还是旧值 → 提交 403 | 抓 token 的页面请求必须 `-b jar -c jar`（与既有脚本的 `csrf_of` 保持一致） |
+| 断言写在清理之前 | 「无残留」断言读的是清理前的状态，恒失败 | 显式清理 → 再断言 |
+
+> 附带提醒：本机 `/c/c` 是**已存在的用户目录**（含用户自己的文件）。
+> 上面第一个坑会在其中创建 `Users/...` 子树，清理时必须只删自己创建的部分，绝不能整个 `rm -rf /c/c`。
+
 
 

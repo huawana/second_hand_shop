@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      自定义 Spring Boot Starter（面试考点 16：自动配置 / SPI / @Conditional 家族）
+
+      【starter 的构成约定】一个「starter」其实由两部分组成：
+        1) autoconfigure 模块：放自动配置类、@ConfigurationProperties、条件装配
+        2) starter 模块：只负责把 autoconfigure 和第三方依赖「聚」到一起
+      本项目体量小，把两者合并成一个 jar（很常见的做法），但包名用独立的 com.example.oss，
+      刻意与业务包 shop.* 分开 —— starter 是给别的项目复用的，不该依赖业务代码。
+
+      【依赖为什么都标 optional】starter 的职责是「补充」而非「强加」：
+      它只在消费方已有 Spring Boot / Spring Web 的前提下工作，不该把 Spring 全家桶
+      再传递一遍（那会引发版本冲突，也是新手写 starter 最容易犯的错）。
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>oss-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+    <name>oss-spring-boot-starter</name>
+    <description>文件上传自动配置 starter：本地磁盘 ⇄ 对象存储，按配置切换</description>
+
+    <properties>
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- 自动配置的基础设施（@AutoConfiguration / @ConditionalOn*） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 生成配置元数据，让 IDE 在 application.properties 里能补全 oss.* -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 只为了 MultipartFile 这个接口 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 配置绑定的编译期支持（@ConfigurationProperties 的宽松绑定/构造绑定校验） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              注意：starter 是「被依赖的普通 jar」，绝不能打成可执行 fat jar
+              （否则消费方拿到的是 BOOT-INF 结构，类根本加载不到）。
+              spring-boot-starter-parent 只把它放在 pluginManagement 里，不显式声明就不会执行，
+              这里额外加一段注释说明是刻意为之。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

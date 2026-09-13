@@ -97,6 +97,16 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- ==================== 自定义 Starter（Phase 1 收尾，考点 16） ==================== -->
+        <dependency>
+            <!-- 文件上传自动配置：注入 FileStorage 即可用，无需任何 @Configuration。
+                 本地构建需先安装：.hermes/mvn.sh -f oss-spring-boot-starter/pom.xml install
+                 （或用 .hermes/build-all.sh 一步完成） -->
+            <groupId>com.example</groupId>
+            <artifactId>oss-spring-boot-starter</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- ==================== 中间件（后续 Phase 的落点，先保持声明） ==================== -->
         <dependency>
             <!-- Phase 3：商品缓存 / 分布式锁 / 限流 -->

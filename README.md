@@ -19,6 +19,7 @@
 | 视图 | Thymeleaf、原生 JS（jQuery） |
 | 数据库 | MySQL 8 |
 | 缓存 / 会话存储 | Redis 5（Phase 1 收尾接入：access token 黑名单 + refresh token 存储，db 3 + `shop:` 前缀） |
+| 自研组件 | `oss-spring-boot-starter`（自定义 Starter，自动配置文件存储，本地磁盘 ⇄ 对象存储可切换） |
 | 连接池 | HikariCP（Spring Boot 默认；原声明的 Druid 全项目零引用，Phase 1 已移除） |
 | 日志 | SLF4J + Logback（控制台 + 滚动文件 + 错误单独归档） |
 | 校验 | JSR-303 / Hibernate Validator |
@@ -59,18 +60,39 @@ export DB_PASSWORD=your_password && mvn spring-boot:run
 
 可覆盖的变量：`DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USERNAME`、`DB_PASSWORD`。
 
-### 4. 启动
+### 4. 构建（注意：需要两步）
+
+本项目依赖一个**自定义 Spring Boot Starter**（`oss-spring-boot-starter`，见下文「自定义 Starter」），
+它是独立的 Maven 工程、不在本项目的 reactor 里，因此**首次构建必须先把它装进本地仓库**：
 
 ```bash
-mvn spring-boot:run
+bash .hermes/build-all.sh          # = 先 install starter，再 clean package 应用
+```
+
+也可以手工两步：
+
+```bash
+.hermes/mvn.sh -f oss-spring-boot-starter/pom.xml install   # 1) 安装 starter
+.hermes/mvn.sh clean package                                # 2) 构建应用
+```
+
+> 本机没有装 Maven CLI，`.hermes/mvn.sh` 封装了「调用 IntelliJ 自带 Maven」这件事。
+> 若你本地有 mvn，把 `.hermes/mvn.sh` 换成 `mvn` 即可。
+
+### 5. 启动
+
+```bash
+java -jar target/springboot3-1.0-SNAPSHOT.jar
+# 或开发期：.hermes/mvn.sh spring-boot:run
 ```
 
 访问 <http://localhost:8080/shop/login>。
 
-### 5. 运行测试
+### 6. 运行测试
 
 ```bash
-mvn test
+.hermes/mvn.sh test                          # 应用：66 个用例
+.hermes/mvn.sh -f oss-spring-boot-starter/pom.xml test   # starter：11 个用例
 ```
 
 ---
@@ -85,11 +107,23 @@ src/main/java/shop/
 │   ├── ErrorCode.java               业务错误码枚举
 │   ├── BizException.java            业务异常
 │   └── GlobalExceptionHandler.java  全局异常处理 + HTTP 状态码映射
+├── security/                        认证授权（Phase 1）
+│   ├── SecurityConfig               SecurityFilterChain / BCrypt / URL 规则 / @EnableMethodSecurity
+│   ├── JwtUtil · AccessToken        access token 签发与解析（含 jti）
+│   ├── JwtAuthenticationFilter      认证入口：查黑名单 + 用 refresh 透明续期
+│   ├── JwtCookieSupport             双 Cookie 读写（ACCESS_TOKEN / REFRESH_TOKEN）
+│   ├── RedisTokenStore              令牌状态：黑名单 / refresh / 已用与宽限标记
+│   ├── RefreshTokenService          签发 / 轮换 / 吊销 / 重放检测
+│   ├── PasswordService              BCrypt + 存量 MD5 登录时透明升级
+│   ├── CurrentUser                  业务侧读取当前登录者
+│   ├── LoginUser · JwtProperties    认证主体与配置
+│   ├── RequestTypeUtils             接口请求识别（决定 401/403 返回 JSON 还是跳转）
+│   └── RestAuthenticationEntryPoint · RestAccessDeniedHandler  401/403 分流
 ├── admin/                           后台侧
 │   ├── Bean/                        Admin · User · Product · Order · Cart
 │   ├── controller/                  Login · Admin · User · Product · Order
 │   ├── mapper/                      对应 Mapper 接口
-│   └── tools/MD5passEncryption     密码摘要（Phase 1 迁移为 BCrypt）
+│   └── tools/MD5passEncryption      【过渡期保留】仅用于校验存量 MD5 摘要，写库一律 BCrypt
 └── shop/                            前台侧
     ├── Bean/CartItem                前端请求体（含参数校验）
     ├── controller/                  Index · Login · Search · Sale · Cart · Buy · Personal · Transaction
@@ -104,15 +138,25 @@ src/main/java/shop/
         └── StringToList             逗号串 ↔ List<Integer> 互转
 
 src/main/resources/
-├── application.properties           数据源 / MyBatis / 上传路径（支持环境变量覆盖）
+├── application.properties           数据源 / MyBatis / JWT / Redis / oss.* 上传（支持环境变量覆盖）
 ├── logback-spring.xml               日志配置
 ├── mapper/*.xml                     6 个 SQL 映射
 ├── templates/shop/ (17 个)          前台页面
 ├── templates/admin/ (9 个)          后台页面
-└── static/                          3665 张商品图 + CSS/JS
+└── static/                          3665 张商品图 + CSS/JS（含 csrf.js）
+
+oss-spring-boot-starter/               自定义 Starter（独立 Maven 工程）
+├── src/main/java/com/example/oss/
+│   ├── OssAutoConfiguration         自动配置（@AutoConfiguration + @ConditionalOn*）
+│   ├── OssProperties                oss.* 配置绑定与规范化
+│   ├── FileStorage                  对外契约：store / delete（以 URL 为交互单位）
+│   └── LocalFileStorage             本地实现（含路径穿越防护）
+└── src/main/resources/META-INF/spring/
+    └── ...AutoConfiguration.imports Boot 3 的自动配置注册文件（SPI）
 
 docs/
-├── schema.sql                       建表脚本
+├── schema.sql                       建表脚本（全新安装用）
+├── migration_phase1.sql             Phase 1 迁移脚本（密码扩列 + role/status）
 └── ROADMAP.md                       改造路线图 + 各阶段进度与验收
 ```
 
@@ -308,11 +352,14 @@ CSRF 防护开启并打通表单 / ajax 两条链路；移除 Controller 里用 
 **令牌生命周期补齐**：短寿命 access（30 分钟）+ Redis 存储的 refresh（7 天，可即时吊销）、
 登出黑名单、刷新轮换与重放检测（含 60 秒并发宽限）、改密码撤销全部会话。
 
-**Phase 1 仅剩：** 自定义 `oss-spring-boot-starter`（考点 16）。
+自定义 Starter `oss-spring-boot-starter`（考点 16）：`@AutoConfiguration` + Boot 3 的
+`AutoConfiguration.imports` SPI + `@ConditionalOnProperty` / `@ConditionalOnMissingBean`，
+把「文件存储」抽成可切换的实现；业务侧只注入 `FileStorage` 拿 URL，
+上传/删除代码从「自己拼路径、自己建目录、自己删文件」变成一行调用。
 
-优先待办：
+**Phase 1 已全部完成。** 下一步：
 
-1. Phase 1 收尾：自定义 `oss-spring-boot-starter`（`@ConditionalOnProperty` 切换本地/OSS/MinIO）
-2. Phase 2：购物车由逗号字符串重构为关联表，引入库存与乐观锁、订单状态机
-3. Phase 3：Redis 缓存体系（令牌存储已在用 Redis，缓存可直接叠加）
-4. Phase 4：下单链路补事务与幂等（当前「先查后改」不是原子操作，存在超卖风险）
+1. Phase 2：购物车由逗号字符串重构为关联表，引入库存与乐观锁、订单状态机
+2. Phase 3：Redis 缓存体系（令牌存储已在用 Redis，缓存可直接叠加）
+3. Phase 4：下单链路补事务与幂等（当前「先查后改」不是原子操作，存在超卖风险）
+4. Phase 10 之前需处理：上传目录仍在 `src/main/resources`（应外置 + WebMvcConfig 映射）

@@ -1,8 +1,8 @@
 package shop.shop.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import com.example.oss.FileStorage;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,13 +14,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import shop.admin.Bean.Product;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
-import shop.shop.tools.ProductPictureProcess;
 import shop.shop.tools.SessionCheck;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
-import java.io.File;
 
 @Slf4j
 @Controller
@@ -31,8 +29,12 @@ public class ShopSaleController {
     @Autowired
     UserMapper userMapper;
 
-    @Value("${upload.path}") // 从配置文件中获取上传路径
-    private String uploadPath;
+    /**
+     * 【Phase 1 收尾】文件存储由自定义 starter `oss-spring-boot-starter` 自动配置注入。
+     * 本类不再关心「存到哪、怎么存、目录存不存在」—— 换对象存储时这里零改动。
+     */
+    @Autowired
+    FileStorage fileStorage;
 
     @PostMapping("/shop/uploadProduct")
     public String uploadProduct(HttpServletRequest request, Model m, @RequestParam("image") MultipartFile image, @RequestParam("name") String name, @RequestParam("price") double price, @RequestParam("description") String description){
@@ -61,9 +63,8 @@ public class ShopSaleController {
         // 这两点正好是 Phase 6「分布式 ID」章节的引入案例。
         Integer nowId = productMapper.getNowId();
         String fileName = String.valueOf(nowId == null ? 1 : nowId + 1) + ".png";
-        String filePath = uploadPath + fileName;
-        ProductPictureProcess.saveFile(username,image,filePath);
-        productMapper.uploadProduct(name,uid,description,price,"/shop/assets/product-img/"+fileName);
+        String imgPath = fileStorage.store(image, fileName);
+        productMapper.uploadProduct(name,uid,description,price,imgPath);
         log.info("用户[{}]发布商品 name={} price={} file={}", username, name, price, fileName);
         return "redirect:/shop/index";
 
@@ -126,20 +127,18 @@ public class ShopSaleController {
             // imgPath 形如 "/shop/assets/product-img/123.png"，会被解析成「当前工作目录下的
             // shop/assets/...」→ 根本指向不到真实文件，delete() 恒失败，旧图永久残留在磁盘。
             // 正确做法：从 URL 里取出文件名，再拼上传目录。
-            String imgPath = origin.getImgPath();
-            String oldFileName = imgPath.substring(imgPath.lastIndexOf('/') + 1);
-            File oldFile = new File(uploadPath + oldFileName);
-            if (oldFile.exists() && !oldFile.delete()) {
-                log.warn("旧图片删除失败: {}", oldFile.getAbsolutePath());
+            // 【Bug 修复】原代码 new File(imgPath) 直接把 URL 当磁盘路径用 → 永远删不到真实文件。
+            // 【Phase 1 收尾】删除也交给 FileStorage：它按 URL 反查真实位置，
+            // 本地实现截取相对路径、云实现调 SDK 删除，调用方始终只有这一行。
+            if (!fileStorage.delete(origin.getImgPath())) {
+                log.warn("旧图片删除失败或文件不存在: {}", origin.getImgPath());
             }
 
             // 【Bug 修复】原代码把新图存成 "{id}.png"，但写回数据库时用的仍是旧的 imgPath，
             // 一旦旧文件名与 id 不对应，就会出现「库里有路径、磁盘没文件」的坏数据。
-            // 这里统一：文件名 = {id}.png，并把同一个值写回数据库。
-            String newFileName = String.valueOf(id) + ".png";
-            ProductPictureProcess.saveFile(username,image,uploadPath + newFileName);
-            productMapper.updateProduct(name,description,price,
-                    "/shop/assets/product-img/" + newFileName);
+            // 这里统一：文件名 = {id}.png，并把 store() 返回的同一个值写回数据库。
+            String newImgPath = fileStorage.store(image, id + ".png");
+            productMapper.updateProduct(name,description,price, newImgPath);
         }
         log.info("用户[{}]修改商品 id={} name={} price={}", username, id, name, price);
         return "redirect:/shop/personRelease";
