@@ -74,6 +74,7 @@
           <div class="form">
             <!-- enctype 必须为 multipart/form-data，否则图片文件不会随表单提交 -->
             <form action="/admin/product_add" method="post" enctype="multipart/form-data">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
               <div class="edit3">
                 <p>商品名称</p>
                 <input class="edit" type="text" name="name" value="" required>

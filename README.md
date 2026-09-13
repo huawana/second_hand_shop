@@ -13,11 +13,12 @@
 
 | 层次 | 技术 |
 |---|---|
-| 语言 / 构建 | Java 17、Maven |
-| 框架 | Spring Boot 2.4.3、Spring MVC、MyBatis 2.2.2 |
+| 语言 / 构建 | Java 17（源码级别）、Maven |
+| 框架 | Spring Boot 3.3.5、Spring MVC、MyBatis 3.0.4 |
+| 认证授权 | Spring Security 6 + JWT（jjwt 0.12.6，HttpOnly Cookie）、BCrypt、RBAC |
 | 视图 | Thymeleaf、原生 JS（jQuery） |
 | 数据库 | MySQL 8 |
-| 连接池 | Druid |
+| 连接池 | HikariCP（Spring Boot 默认；原声明的 Druid 全项目零引用，Phase 1 已移除） |
 | 日志 | SLF4J + Logback（控制台 + 滚动文件 + 错误单独归档） |
 | 校验 | JSR-303 / Hibernate Validator |
 | 测试 | JUnit 5、Mockito、AssertJ |
@@ -205,7 +206,37 @@ fetch('/shop/addToCart', {...})
 - 参数校验用注解（`@NotBlank` 等）+ `@Valid`，不要手写 if 链
 - 业务失败抛 `BizException(ErrorCode.XXX)`，由全局处理器统一转换，不要在 Controller 里自己拼返回结构
 - **不要提交 `target/`、`logs/`、`.idea/`**（已在 `.gitignore`）
-- 数据库变更必须同步更新 `docs/schema.sql`
+- 数据库变更必须同步更新 `docs/schema.sql`，并提供可执行的迁移脚本（如 `docs/migration_phase1.sql`）
+
+### 🔐 认证与授权（Phase 1 起）
+
+- **身份只认 JWT**：`SecurityContext` 由 `JwtAuthenticationFilter` 从 HttpOnly Cookie 或
+  `Authorization: Bearer` 头重建。**不要在 Controller 里用 session 判断「谁登录了」** ——
+  业务代码通过 `shop.security.CurrentUser` 取当前用户（`username()` / `id()` / `hasRole()`）。
+- **鉴权写在安全层**：URL 规则（`SecurityConfig`）+ 方法注解（`@PreAuthorize`）双保险，
+  Controller 内部不要再自行判角色（两份真相会导致「认证通过却被自己的代码踢出去」）。
+- **HttpSession 只允许承载展示数据与一次性提示**（用户名、地区、学校、`saleError` 等），
+  绝不承载任何授权信息。
+- 新增 `/shop/**` 的写接口或页面时，记得在 `SecurityConfig` 的 `PUBLIC_PATHS` /
+  `AUTHENTICATED_PATHS` 里归类；接口端点还要同步登记到 `RequestTypeUtils.API_PATHS`
+  （否则 401/403 会被当成页面请求返回 302）。
+
+### 🛡 CSRF（新增表单 / ajax 必读）
+
+CSRF 防护处于开启状态（`CookieCsrfTokenRepository` + 非 Xor 的 `CsrfTokenRequestAttributeHandler`）。
+**所有非 GET 请求都必须携带 token，否则一律 403**：
+
+| 场景 | 做法 |
+|---|---|
+| 表单 POST | 用 `th:action` 声明 action，并保留表单内的 `<input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>` |
+| fetch / `$.ajax` | 引入 `/shop/assets/JS/csrf.js`，它会自动读取 `XSRF-TOKEN` Cookie 并塞进 `X-XSRF-TOKEN` 请求头 |
+| curl 手工验证 | 表单类加 `-d "_csrf=$TOKEN"`；JSON 类加 `-H "X-XSRF-TOKEN: $TOKEN"` 且**同时带上同一份 Cookie** |
+
+token 会随每次响应轮换，所以**脚本里必须在发请求前现取最新值**，不能用早先抓到的旧值
+（`.hermes/verify-phase0.sh` 里的 `json_post()` / `csrf_of()` 就是为此封装的）。
+
+> JWT 配置在 `application.properties` 的 `jwt.*`：`secret`（HS256 要求 ≥ 32 字节，
+> 生产必须用环境变量 `JWT_SECRET` 覆盖）、`expire-minutes`、`cookie-name`、`cookie-secure`。
 
 ### ⚠️ 视图名不要带前导斜杠
 
@@ -242,12 +273,17 @@ java -jar target/springboot3-1.0-SNAPSHOT.jar --server.port=18080
 
 完整路线图、面试考点映射表、各阶段验收标准与实测数据见 **[docs/ROADMAP.md](docs/ROADMAP.md)**。
 
-当前阶段（Phase 0）已完成：14 处缺陷修复、数据库审计与索引补齐、工程化基础设施、
-45 个单元测试、2 个水平越权漏洞修复。
+**Phase 0 已完成：** 14 处缺陷修复 + 打包阶段新发现 3 处、数据库审计与索引补齐、
+工程化基础设施（统一响应体 / 全局异常 / 参数校验 / 日志规范）、45 个单元测试、2 个水平越权漏洞修复。
+
+**Phase 1 已完成（本阶段）：**
+Spring Boot 2.4.3 → 3.3.5 + `javax`→`jakarta` 全量迁移；Spring Security 6 + JWT（HttpOnly Cookie）
++ RBAC（`ROLE_USER` / `ROLE_ADMIN`）+ BCrypt 密码（存量 MD5 登录时透明升级）；
+CSRF 防护开启并打通表单 / ajax 两条链路；移除 Controller 里用 session 鉴权的脆弱写法。
 
 优先待办：
 
-1. 密码存储由无盐 MD5 迁移至 BCrypt
-2. Spring Boot 2.4.3 升级至 3.2（Spring Cloud / Sentinel / Seata 均要求此版本）
-3. 购物车由逗号字符串重构为关联表，并引入库存与乐观锁
-4. 下单链路补事务与幂等（当前「先查后改」不是原子操作，存在超卖风险）
+1. Phase 1 收尾：JWT 黑名单 + refresh token（退出登录后旧 token 在有效期内仍可用，需用 Redis 兜住）
+2. Phase 1 收尾：自定义 `oss-spring-boot-starter`（考点 16，封装文件上传，`@ConditionalOnProperty` 切换本地/OSS）
+3. Phase 2：购物车由逗号字符串重构为关联表，引入库存与乐观锁、订单状态机
+4. Phase 4：下单链路补事务与幂等（当前「先查后改」不是原子操作，存在超卖风险）

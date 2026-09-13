@@ -15,7 +15,7 @@
 | Phase | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
 | Phase 0 修 bug + 工程化地基 | ✅ 已完成 | 2026-09-13 | 见文末「Phase 0 完成报告」 |
-| Phase 1 Spring Boot 3 + Security + JWT | ⏳ 待开始 | — | |
+| Phase 1 Spring Boot 3 + Security + JWT | 🟡 主体完成 | 2026-09-13 | 1.1–1.7 已完成；1.8 自定义 starter、token 黑名单/refresh 待做，见文末「Phase 1 完成报告」 |
 | Phase 2 领域建模重构 | ⏳ 待开始 | — | |
 | Phase 3 Redis 缓存体系 | ⏳ 待开始 | — | |
 | Phase 4 高并发秒杀 | ⏳ 待开始 | — | |
@@ -1004,3 +1004,137 @@ multipart 上传落盘、2 个越权场景、中文编码链路（HTTP→JDBC→
 | 用「最大 id + 1」生成文件名（ID 竞态） | Phase 6（雪花算法） |
 | 删除订单后未回滚商品 `sold_time`，商品被永久锁死 | Phase 2 |
 | `logs/` 目录未纳入 .gitignore 的目录级排除（`*.log` 已覆盖） | 无需处理 |
+
+---
+
+# Phase 1 完成报告（2026-09-13，主体完成）
+
+## 交付内容
+
+| Task | 内容 | 状态 |
+|---|---|---|
+| 1.1 | `pom.xml`：Boot 2.4.3 → 3.3.5，引入 `spring-boot-starter-security` + jjwt 0.12.6 | ✅ |
+| 1.2 | `javax.servlet` / `javax.validation` → `jakarta.*` 全量迁移（18 个文件） | ✅ |
+| 1.3 | `SecurityConfig`：`SecurityFilterChain`、`BCryptPasswordEncoder`、BCrypt、URL 放行规则 | ✅ |
+| 1.4 | `JwtUtil` + `JwtAuthenticationFilter`（Cookie 与 `Authorization: Bearer` 双通道） | ✅ |
+| 1.5 | 用户表 `role` / `status` 字段 + RBAC（`hasRole("ADMIN")` + `@PreAuthorize`） | ✅ |
+| 1.6 | 登录返回 JWT 写 HttpOnly Cookie；登出清 Cookie；401/403 按「接口 vs 页面」分流 | ✅ |
+| 1.7 | 存量 30 个用户 + 1 个管理员的 MD5 密码「登录时透明升级」为 BCrypt | ✅ |
+| 1.8 | 自定义 `oss-spring-boot-starter` | ⏳ 待做（考点 16） |
+| 追加 | CSRF 防护（表单隐藏域 + `csrf.js` 自动注入请求头两条链路） | ✅ |
+| 追加 | 移除 Controller 里用 HttpSession 判断「是否登录/是否管理员」的重复鉴权 | ✅ |
+
+## 关键设计决策（面试可讲）
+
+### 1. 为什么 JWT 放 HttpOnly Cookie，而不是 localStorage + Authorization 头
+
+页面跳转（`<a href>`）与表单提交由浏览器发起，**无法手动附加请求头**，只有 Cookie 会被自动携带。
+若强行用请求头方案，就得把 25 个服务端渲染模板全部改成前端路由 —— 收益低、风险高。
+Cookie 同时设了三个安全属性：`HttpOnly`（XSS 偷不走）、`SameSite=Lax`（跨站不带）、
+`Secure`（生产开，仅 HTTPS 发送）。过滤器仍额外支持 `Authorization: Bearer`，
+让同一套认证能服务浏览器与小程序/App 两类客户端。
+
+### 2. 存量 MD5 密码怎么迁移
+
+MD5 是单向的，写脚本「批量转换」根本做不到（反推不出明文）。采用**登录时透明升级**：
+用户下次登录、校验通过的那一刻顺手把库里的 MD5 换成 BCrypt。用户无感知、不用重置密码，
+存量摘要随真实流量逐步收敛。这本质是灰度迁移思路 —— 新旧格式在过渡期共存。
+（同时必须把 `password` 列从 `varchar(50)` 扩到 `varchar(100)`：BCrypt 摘要固定 60 字符，
+不扩列会在写入时报 `Data too long`。见 `docs/migration_phase1.sql`。）
+
+### 3. 401 与 403 必须分流，而且接口与页面要分别处理
+
+- `401 = 我不知道你是谁`，`403 = 我知道你是谁但你没权限`，混用会让前端做错决策
+  （收到 403 去跳登录页，用户重新登录后依然 403，体验死循环）。
+- 接口请求（`Accept: application/json` / `X-Requested-With` / 端点白名单）→ 返回统一响应体 JSON；
+  页面请求 → 302 跳对应端登录页。给浏览器返回裸 JSON 或给 fetch 返回 302（会被自动跟随、
+  最终拿到登录页 HTML）都是踩过的坑。
+
+### 4. 无状态 JWT 与 HttpSession 的边界
+
+`SessionCreationPolicy.STATELESS` 只表示「认证状态不落 session」。
+本项目仍用 HttpSession 承载**视图展示数据**（用户名/地区/学校）与一次性提示（`saleError` 等），
+这些是纯 UI 状态，不参与任何授权判断。**授权看 JWT，展示看 session，职责分离。**
+后台 Controller 里原本用 `session.getAttribute("adminuser")` 做鉴权，已全部删除 ——
+它与安全层的 JWT 判断构成「两份真相」，session 一失效就会出现「认证通过却被自己代码踢出去」。
+
+## 踩坑记录（含两个不查源码很难定位的问题）
+
+**坑 1：session id 每个请求都在轮换。**
+只配 `sessionCreationPolicy(STATELESS)` 不够：`SessionManagementFilter` 仍在链上，
+而「无状态模式下每次请求的认证都是新的」，于是会话固定攻击防护
+（`ChangeSessionIdAuthenticationStrategy`）**每个请求都执行一次**，表现为每次响应都下发新的
+`JSESSIONID`。任何缓存了 Cookie 的客户端（浏览器预取、压测工具、脚本）下一个请求就丢会话。
+解法：显式 `.sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())`。
+（定位方式：`--logging.level.org.springframework.security=DEBUG`，直接看到
+`ChangeSessionIdAuthenticationStrategy - Changed session id from ...`。）
+
+**坑 2：Thymeleaf 的 `th:action` 没有自动注入 `_csrf` 隐藏域。**
+`RequestDataValueProcessor` 需要从 request 属性里取到 `CsrfToken`，而**非 Xor 的**
+`CsrfTokenRequestAttributeHandler` 默认不写这个属性 —— 现象是「表单渲染正常、就是没有
+`_csrf`」，提交必 403。解法：显式 `setCsrfRequestAttributeName("_csrf")`，
+同时在表单里写死隐藏域（不依赖框架的隐式行为，可预测性优先）。
+另外还修了一个连带 bug：CSRF 失败抛的是 `AccessDeniedException` 的子类，
+会被「权限不足 → 跳首页」的分支吞掉，表现成「提交后莫名回首页」，真正原因完全看不到 ——
+现在在 `RestAccessDeniedHandler` 里单独识别 CSRF 异常并返回明确的 403。
+
+**坑 3：CookieCsrfTokenRepository 的校验是「请求里的 token 与 Cookie 里的 token 比对」。**
+所以 JSON 请求只发 `X-XSRF-TOKEN` 头、不带同一份 Cookie，一样 403。
+且 token 每次响应都会轮换，脚本必须**发请求前现取**，用早先抓到的旧值必 403。
+
+## 验证证据（实测）
+
+**单元测试**
+```
+Tests run: 45, Failures: 0, Errors: 0, Skipped: 0    BUILD SUCCESS
+```
+
+**Phase 1 端到端验证（打包 jar，端口 18080，32 项断言）**
+```
+PASS=32  FAIL=0
+```
+覆盖：匿名可访问性、CSRF 隐藏域注入与缺失即 403、页面请求 302 跳登录 vs 接口请求 401 JSON、
+登录成功与 Cookie 三属性（HttpOnly / SameSite=Lax / Max-Age）、携带 Cookie 的接口调用、
+缺 CSRF 头即 403、`ROLE_USER` 访问后台被拒、管理员登录后可访问后台、
+登出清 Cookie 后受保护资源不可访问、库中密码已是 BCrypt、`role` 字段就位。
+
+**Phase 0 回归（确认 Phase 1 没打破原有能力，56 项断言）**
+```
+PASS=56  FAIL=0
+数据完整性：商品 3659 / 用户 30 / 订单 28 / 购物车 29（与基线一致，无污染）
+```
+
+## 面试可用话术（Phase 1 部分）
+
+> 「我把技术栈从 Spring Boot 2.4.3 升到 3.3.5，`javax`→`jakarta` 全量迁移，
+> 然后把认证授权从『session + 无盐 MD5』改造成 Spring Security 6 + JWT 的无状态方案。
+>
+> 密码这块有个现实约束：库里 30 个用户的摘要都是 MD5，而 MD5 单向、没法批量转换，
+> 我用了**登录时透明升级** —— 用户下次登录校验通过时顺手把摘要换成 BCrypt，
+> 用户完全无感知，存量摘要随流量自然收敛。
+>
+> 凭证我放在 HttpOnly + SameSite=Lax 的 Cookie 里而不是 localStorage：
+> 我们的页面是服务端渲染的，页面跳转根本没法带 `Authorization` 头；
+> 而且 HttpOnly 能防住 XSS 偷 token。因为用了 Cookie，**CSRF 就必须防** ——
+> 表单用隐藏域、ajax 由 `csrf.js` 统一注入请求头，令牌走 BREACH 无关的非 Xor 处理器
+> 以保证 Cookie / 隐藏域 / 请求头三处取值一致。
+>
+> 401 和 403 我做了分流，而且接口返回 JSON、页面 302 跳登录 —— 混在一起的话
+> 前端会把『没权限』当成『没登录』，出现重新登录后依然 403 的死循环。
+>
+> 过程中踩了两个比较隐蔽的坑：一是只配 STATELESS 不够，会话固定攻击防护会在每个请求
+> 触发 session id 轮换，导致缓存 Cookie 的客户端丢会话；二是 Thymeleaf 的 `th:action`
+> 在我们这套 CSRF 配置下不会自动注入隐藏域，得显式指定属性名 —— 这两个都是靠
+> Spring Security 的 DEBUG 日志和逐请求对比响应头定位出来的。」
+
+## 已知遗留（明确留给后续）
+
+| 遗留项 | 说明 | 处理阶段 |
+|---|---|---|
+| JWT 黑名单 / refresh token | 无状态 token 在过期前始终有效，登出只清 Cookie；需 Redis 黑名单兜住 | Phase 1 收尾（Redis 已在跑） |
+| 自定义 `oss-spring-boot-starter` | 考点 16：`@ConditionalOnProperty` 切换本地/OSS/MinIO | Phase 1 收尾 |
+| `shopusername` 哨兵值「请登录」 | 保留兼容（仅展示层），授权已不依赖它；后续可用统一拦截器彻底替换 | Phase 2 |
+| `role` 字段未在后台界面暴露 | 数据库/实体已就位，管理界面尚未提供改角色入口 | Phase 2 |
+| 上传目录仍在 `src/main/resources` | 运行时写源码目录会被重新编译覆盖 | Phase 1 收尾 / Phase 10 |
+| 验证脚本在 `.hermes/`（未入库） | 沿用 Phase 0 约定（`.hermes/` 已 gitignore），属本地工具链 | — |
+

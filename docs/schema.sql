@@ -34,7 +34,10 @@ DROP TABLE IF EXISTS `lxy_user`;
 CREATE TABLE `lxy_user` (
     `id`          int unsigned NOT NULL AUTO_INCREMENT,
     `username`    varchar(100) NOT NULL DEFAULT '' COMMENT '登录名',
-    `password`    varchar(50)  DEFAULT NULL COMMENT 'MD5 摘要（Phase 1 迁移为 BCrypt，长度需扩到 60+）',
+    -- Phase 1：扩容到 100 以容纳 BCrypt 摘要（固定 60 字符）。过渡期可能残留旧的无盐 MD5。
+    `password`    varchar(100) DEFAULT NULL COMMENT 'BCrypt 摘要（$2a$...），过渡期可能残留 MD5',
+    `role`        varchar(20)  NOT NULL DEFAULT 'USER' COMMENT '角色：USER / ADMIN（RBAC，Phase 1 新增）',
+    `status`      tinyint      NOT NULL DEFAULT 1 COMMENT '状态：1 正常 / 0 禁用（Phase 1 新增）',
     `email`       varchar(100) DEFAULT NULL,
     `phone`       varchar(20)  DEFAULT NULL,
     `created_at`  datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -47,7 +50,9 @@ CREATE TABLE `lxy_user` (
     -- 登录/注册均按 username 精确查，原库只有主键索引 → 每次登录全表扫描
     UNIQUE KEY `uk_username` (`username`),
     -- 按学校筛选商品的场景会先查 user 表
-    KEY `idx_school` (`school`)
+    KEY `idx_school` (`school`),
+    -- Phase 1：按角色查用户（后台用户列表 / 审计）
+    KEY `idx_role` (`role`)
 ) ENGINE = InnoDB
   AUTO_INCREMENT = 58
   DEFAULT CHARSET = utf8mb4
@@ -128,7 +133,9 @@ DROP TABLE IF EXISTS `lxy_admin`;
 CREATE TABLE `lxy_admin` (
     `id`         int unsigned NOT NULL AUTO_INCREMENT,
     `adminuser`  varchar(50)  NOT NULL DEFAULT '',
-    `adminpass`  varchar(50)  DEFAULT NULL COMMENT 'MD5 摘要（Phase 1 迁移为 BCrypt）',
+    -- Phase 1：同样扩容以容纳 BCrypt。管理员不单独设 role 字段——
+    -- 「在这张表里」本身就意味着 ADMIN 角色，用表区分比用字段更简洁。
+    `adminpass`  varchar(100) DEFAULT NULL COMMENT 'BCrypt 摘要（$2a$...），过渡期可能残留 MD5',
     `created_at` datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `login_at`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),

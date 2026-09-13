@@ -68,6 +68,7 @@
       </div>
       <div class="form">
         <form action="/shop/changeProduct" method="post" enctype="multipart/form-data" id="changeForm">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
           <label class="error"></label>
           <input hidden name="id" th:value="${product.id}">
           <div class="uploadPhoto">

@@ -45,6 +45,7 @@
 		<h1>登录</h1>
 		<h3 th:text="${loginMistake}"></h3>
 		<form action="/shop/login" method="post">
+		    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
 			<input type="text" placeholder="用户名" name="username">
 			<input type="password" placeholder="密码" name="password">
 			<button type="submit">登录</button>

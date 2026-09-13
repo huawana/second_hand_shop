@@ -54,6 +54,7 @@
     </ul>
     <div class="search">
         <form action="/shop/search" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
             <div class="input"></div>
         </form>
     </div>

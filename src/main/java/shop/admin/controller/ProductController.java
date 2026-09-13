@@ -10,18 +10,20 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import shop.admin.Bean.Product;
 import shop.admin.Bean.User;
 import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
+import shop.security.CurrentUser;
 import shop.shop.tools.ProductPictureProcess;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.util.List;
 
 @Slf4j
+// 【Phase 1】后台商品管理：仅 ADMIN 可访问（方法级鉴权，与 URL 规则形成纵深防御）
 @Controller
+@PreAuthorize("hasRole('ADMIN')")
 public class ProductController {
     @Autowired
     ProductMapper productMapper;
@@ -31,12 +33,9 @@ public class ProductController {
     @Value("${upload.path}")
     private String uploadPath;
 
+    // 鉴权由安全层统一负责（URL 规则 + 类级 @PreAuthorize，均基于 JWT），不再自行判 session
     @GetMapping("/admin/product")
-    public String product(Model m, HttpServletRequest request){
-        HttpSession session = request.getSession();
-        if(session.getAttribute("adminuser")==null){
-            return "redirect:/admin/login";
-        }
+    public String product(Model m){
         List<Product> productList = productMapper.getProducts("");
         m.addAttribute("products",productList);
         return "admin/product";
@@ -47,11 +46,7 @@ public class ProductController {
      * 并没有 product_add.html → 点击必然 500。现补齐页面，并把卖家列表带到前端供选择。
      */
     @GetMapping("/admin/product_add")
-    public String productAdd(HttpServletRequest request, Model m){
-        HttpSession session = request.getSession();
-        if(session.getAttribute("adminuser")==null){
-            return "redirect:/admin/login";
-        }
+    public String productAdd(Model m){
         m.addAttribute("users", userMapper.getUsers());
         return "admin/product_add";
     }
@@ -66,11 +61,7 @@ public class ProductController {
                                @RequestParam("price") double price,
                                @RequestParam("description") String description,
                                @RequestParam("sellerUsername") String sellerUsername,
-                               HttpServletRequest request, Model m){
-        HttpSession session = request.getSession();
-        if(session.getAttribute("adminuser")==null){
-            return "redirect:/admin/login";
-        }
+                               Model m){
         User seller = userMapper.getUserByUsername(sellerUsername);
         if (seller == null) {
             m.addAttribute("result", "卖家不存在：" + sellerUsername);
@@ -100,10 +91,7 @@ public class ProductController {
     }
 
     @GetMapping("/admin/product_delete/{id}")
-    public String productDelete(@PathVariable("id") int id,Model m,HttpSession session){
-        if(session.getAttribute("adminuser")==null){
-            return "redirect:/admin/login";
-        }
+    public String productDelete(@PathVariable("id") int id,Model m){
         try{
             productMapper.deleteProduct(id);
             log.info("管理员删除商品 id={}", id);

@@ -55,6 +55,7 @@
     </ul>
     <div class="search">
         <form action="/shop/search" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
             <input type="text" name="query" placeholder="在这里输入搜索内容">
             <button type="submit">搜索</button>
         </form>
@@ -77,6 +78,7 @@
         </div>
     </div>
 </main>
+<script src="/shop/assets/JS/csrf.js"></script>
 <script src="/shop/assets/JS/productDetail.js"></script>
 <script src="/shop/assets/JS/cart.js"></script>
 </body>

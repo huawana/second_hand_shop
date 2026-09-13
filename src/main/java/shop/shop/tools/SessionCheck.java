@@ -2,6 +2,8 @@ package shop.shop.tools;
 
 import org.springframework.ui.Model;
 import shop.admin.Bean.Product;
+import shop.security.CurrentUser;
+import shop.security.LoginUser;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -10,7 +12,16 @@ import java.util.List;
 public class SessionCheck {
     public static boolean checkSessionName(HttpSession session){
         if (session.getAttribute("shopusername") == null) {
-            session.setAttribute("shopusername", "请登录");
+            // 【Phase 1】先看 JWT 里的身份，让「认证层」与「展示层」保持一致：
+            // token 有效（用户确实登录着）但 session 因超时丢失了展示数据时，
+            // 用 JWT 的身份补回 session，避免出现「明明登录着却被判未登录」的割裂。
+            // 若 JWT 也没有，才写入哨兵值（保持原有行为不变）。
+            LoginUser current = CurrentUser.get();
+            if (current != null) {
+                session.setAttribute("shopusername", current.getUsername());
+            } else {
+                session.setAttribute("shopusername", "请登录");
+            }
         }
         return session.getAttribute("shopusername").equals("请登录");
     }

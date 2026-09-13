@@ -48,6 +48,7 @@
   <h1>注册</h1>
   <h3 th:text="${signUpMistake}"></h3>
   <form action="/shop/signup" method="post">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
     <input type="text" placeholder="用户名（8位以下）" name="username">
     <input type="password" placeholder="密码（8到16位，至少包括两种字符）" name="password">
     <input type="password" placeholder="确认密码" name="confirmpassword">
