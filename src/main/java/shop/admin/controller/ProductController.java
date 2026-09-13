@@ -16,8 +16,8 @@ import shop.admin.mapper.ProductMapper;
 import shop.admin.mapper.UserMapper;
 import shop.shop.tools.ProductPictureProcess;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.util.List;
 
 @Slf4j

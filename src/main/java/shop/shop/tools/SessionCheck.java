@@ -3,8 +3,8 @@ package shop.shop.tools;
 import org.springframework.ui.Model;
 import shop.admin.Bean.Product;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.util.List;
 
 public class SessionCheck {

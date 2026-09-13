@@ -8,84 +8,98 @@
     <artifactId>springboot3</artifactId>
     <version>1.0-SNAPSHOT</version>
 
-    <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <parent>
-        <artifactId>spring-boot-starter-parent</artifactId>
         <groupId>org.springframework.boot</groupId>
-        <version>2.4.3</version>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <!-- Phase 1：2.4.3 → 3.3.5
+             选 3.3.5 的理由：
+               1) 官方支持 Java 17~22，本机 JDK 22 直接可用，不需要额外装 JDK
+               2) 与 Spring Cloud 2023.0.x / Spring Cloud Alibaba 2023.0.x 对齐，
+                  后续 Phase 11 拆微服务、接入 Nacos/Sentinel/Seata 不需要再动父版本
+               3) 是 Boot 3.3 的最后一个补丁版，稳定
+             注意：Boot 3.3 是 javax → jakarta 的分水岭，所有 javax.servlet / javax.validation
+             必须迁到 jakarta.*，否则启动即 ClassNotFoundException。 -->
+        <version>3.3.5</version>
+        <relativePath/>
     </parent>
 
+    <properties>
+        <!-- Boot 3 的基线是 Java 17。用 release 而不是 source/target：
+             release 会同时约束字节码版本与 API 可见性，避免误用高版本 JDK 的新 API。 -->
+        <java.version>17</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- 第三方组件版本（不交给 Boot 管理的部分统一在这里收口） -->
+        <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
+        <jjwt.version>0.12.6</jjwt.version>
+    </properties>
+
     <dependencies>
+        <!-- ==================== Web / 视图 ==================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
 
-        <!-- 参数校验（JSR-303 / Hibernate Validator），配合 @Valid 使用 -->
+        <!-- ==================== 持久层 ==================== -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>${mybatis-spring-boot.version}</version>
+        </dependency>
+        <dependency>
+            <!-- 注意坐标变了：Boot 2.x 时代是 mysql:mysql-connector-java（已废弃），
+                 现在归到 com.mysql:mysql-connector-j，版本由 Boot 统一管理。
+                 作用域 runtime：代码里只通过 JDBC 接口访问，不直接依赖其 API。 -->
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 说明：原来声明的 com.alibaba:druid 在整个项目里零引用（没有配置类、没有 StatFilter），
+             属于「为了用连接池而声明连接池」。Phase 1 直接移除，
+             连接池改用 Boot 默认的 HikariCP（由 mybatis starter 传递引入）。
+             Phase 9 做 SQL 监控时，再按需加回 druid-spring-boot-3-starter。 -->
+
+        <!-- ==================== 参数校验 ==================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- 测试：JUnit 5 + Mockito + AssertJ + spring-test -->
+        <!-- ==================== 中间件（后续 Phase 的落点，先保持声明） ==================== -->
         <dependency>
+            <!-- Phase 3：商品缓存 / 分布式锁 / 限流 -->
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Phase 8：IM 私聊（原项目遗留的 chat_records / lxy_mate 表正好用上） -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
 
+        <!-- ==================== 工具 ==================== -->
         <dependency>
-            <groupId>mysql</groupId>
-            <artifactId>mysql-connector-java</artifactId>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
             <optional>true</optional>
         </dependency>
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>druid</artifactId>
-            <version>1.2.16</version>
-        </dependency>
 
+        <!-- ==================== 测试 ==================== -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.30</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-thymeleaf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>2.2.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
-
-        <!-- hanlp-->
-<!--        <dependency>-->
-<!--            <groupId>com.hankcs</groupId>-->
-<!--            <artifactId>hanlp</artifactId>-->
-<!--            <version>portable-1.7.7</version>-->
-<!--        </dependency>-->
-
     </dependencies>
 
     <build>
@@ -93,7 +107,15 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>2.5.4</version>
+                <configuration>
+                    <excludes>
+                        <!-- devtools 不打包进产物 -->
+                        <exclude>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-devtools</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -23,9 +23,9 @@ import shop.shop.tools.SessionCheck;
 import shop.shop.tools.StringToList;
 import shop.shop.tools.UserProcess;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
-import javax.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
 

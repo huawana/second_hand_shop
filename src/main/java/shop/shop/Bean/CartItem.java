@@ -1,6 +1,6 @@
 package shop.shop.Bean;
 
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank;
 
 /**
  * 前端 ajax 请求体。

@@ -11,8 +11,8 @@ import shop.admin.mapper.UserMapper;
 import shop.admin.tools.MD5passEncryption;
 import shop.shop.tools.StringContainsMultipleTypes;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.util.Objects;
 
 @Controller

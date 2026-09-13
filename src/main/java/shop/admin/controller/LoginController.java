@@ -9,8 +9,8 @@ import shop.admin.Bean.Admin;
 import shop.admin.mapper.AdminMapper;
 import shop.admin.tools.MD5passEncryption;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;

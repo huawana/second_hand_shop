@@ -16,8 +16,8 @@ import shop.shop.Bean.CartItem;
 import shop.shop.mapper.SearchMapper;
 import shop.shop.tools.*;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.List;
 

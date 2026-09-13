@@ -11,8 +11,8 @@ import shop.shop.mapper.SearchMapper;
 import shop.shop.tools.SearchProcess;
 import shop.shop.tools.SessionCheck;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.util.HashMap;
 import java.util.List;
 
