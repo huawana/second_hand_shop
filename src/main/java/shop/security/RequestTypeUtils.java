@@ -33,7 +33,10 @@ public final class RequestTypeUtils {
             "/shop/buy",
             "/shop/buySuccess",
             "/shop/changeStatus",
-            "/shop/deleteMyRelease"
+            "/shop/deleteMyRelease",
+            // 【Phase 2】分类接口返回 JSON，未登录时也应得到 401 JSON 而不是 302 跳登录页
+            "/shop/api/categories",
+            "/shop/api/categories/page"
     );
 
     public static boolean isApiRequest(HttpServletRequest request) {

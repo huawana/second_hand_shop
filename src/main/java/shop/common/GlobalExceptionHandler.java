@@ -8,8 +8,10 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.stream.Collectors;
@@ -77,6 +79,37 @@ public class GlobalExceptionHandler {
         log.warn("缺少必填参数 uri={} param={}", request.getRequestURI(), e.getParameterName());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Result.fail(ErrorCode.PARAM_ERROR, "缺少必填参数：" + e.getParameterName()));
+    }
+
+    /**
+     * 请求方法不支持（例如把 POST-only 的 /shop/search 用 GET 调）。
+     *
+     * <p>【为什么必须单独处理】不处理就会落到下面的兜底分支，被记成 ERROR + 500。
+     * 后果很实际：这明明是客户端用错了方法，却会推高服务端错误率、触发误告警，
+     * 排查时还要去翻堆栈才发现「根本不是服务端故障」。归成 405 才是它的真实语义。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Result<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e,
+                                                                 HttpServletRequest request) {
+        log.warn("请求方法不支持 uri={} method={} supported={}",
+                request.getRequestURI(), request.getMethod(), e.getSupportedHttpMethods());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(Result.fail(ErrorCode.PARAM_ERROR,
+                        "请求方法 " + request.getMethod() + " 不被支持"));
+    }
+
+    /**
+     * 访问了不存在的路径 / 静态资源。
+     *
+     * <p>同样是为了把「404 的语义」和「500 的故障」分开：
+     * 扫目录、爬虫、前端写错 URL 都会命中这里，它们不该被当成服务端异常报警。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result<Void>> handleNoResource(NoResourceFoundException e,
+                                                         HttpServletRequest request) {
+        log.warn("资源不存在 uri={}", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Result.fail(ErrorCode.NOT_FOUND, "资源不存在"));
     }
 
     /** 兜底：预期外的系统异常 */

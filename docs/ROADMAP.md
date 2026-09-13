@@ -35,7 +35,7 @@
 |---|---|---|---|
 | Phase 0 修 bug + 工程化地基 | ✅ 已完成 | 2026-09-13 | 见文末「Phase 0 完成报告」 |
 | Phase 1 Spring Boot 3 + Security + JWT | ✅ 已完成 | 2026-09-13 | 1.1–1.8 全部完成（含令牌生命周期、自定义 starter），见文末「Phase 1 完成报告」 |
-| Phase 2 领域建模 + 常规电商闭环 | 🟡 进行中 | — | 2.1 表结构与迁移已完成（已实测幂等）；2.2 起进行中 |
+| Phase 2 领域建模 + 常规电商闭环 | 🟡 进行中 | — | 2.1 表结构与迁移 ✅（已实测幂等）；2.2 MyBatis-Plus 接入 ✅（分页/乐观锁/自动填充）；2.3 购物车改造起待做 |
 | Phase 3 Redis 缓存 + 分布式锁 | ⏳ 待开始 | — | **必做** |
 | Phase 4 MQ + 定时任务（含秒杀基础版）| ⏳ 待开始 | — | **必做** |
 | Phase 5 工程化补齐（文档 / AOP / 幂等 / 模拟支付）| ⏳ 待开始 | — | 加分 |
@@ -260,6 +260,29 @@ Phase 6  部署交付（Docker Compose/Nginx/压测数字/面试问答）       
 
 **验收：** 分类 → 商品 → 购物车 → 下单 → 支付 → 评价 全链路走通；
 README 有 `EXPLAIN` 前后对比表、乐观锁与悲观锁的对比结论。
+
+### 📌 Phase 2 执行进度（2026-09-13）
+
+| 任务 | 状态 | 证据 |
+|---|---|---|
+| 2.1 表结构 + 数据迁移（`docs/schema_v2.sql`）| ✅ | 新增 6 表 + 旧表补 8 列；脚本连跑两次输出逐字节一致（幂等）；购物车逐用户集合 MATCH、订单 28/28 快照零不匹配 |
+| 2.2 MyBatis-Plus 接入 | ✅ | 分页插件实测生效（`total` 来自插件 COUNT、`LIMIT` 偏移正确、`maxLimit=100` 生效、越界返回空）；分类接口 8 类；老 XML Mapper 链路回归全通 |
+| 2.3 cart_item 改造 | ⏳ | — |
+| 2.4 库存 + 乐观锁/悲观锁 | ⏳ | — |
+| 2.5 订单状态机 + order_item | ⏳ | — |
+| 2.6 索引 EXPLAIN 前后对比 | ⏳ | — |
+
+**2.2 踩到的坑（面试可讲）**
+- MyBatis-Plus 3.5.9 起把依赖 JSqlParser 的功能（首当其冲是分页插件 `PaginationInnerInterceptor`）
+  从核心包拆了出去，只引 starter 会报「找不到符号」——需额外引入 `mybatis-plus-jsqlparser`。
+- 配置前缀必须跟着换：`mybatis.*` → `mybatis-plus.*`，否则 `mapper-locations`、
+  驼峰映射、`log-impl` 全部静默失效（症状是 SQL 查不到映射或日志突然刷屏，且没有任何报错）。
+- 不能「叠加」两个 starter：`mybatis-spring-boot-starter` 与 MP starter 同时存在会因
+  两套 `SqlSessionFactory` 配置打架，正确做法是**替换**。
+
+**顺手修正（原 Phase 0 遗漏）**
+`GlobalExceptionHandler` 的兜底分支把「请求方法不支持」和「访问不存在的路径」都吞成了 500 ——
+这是客户端错误却被记成服务端故障，会污染错误率与告警。已补 `405`（方法不支持）与 `404`（资源不存在）两个映射。
 
 ---
 

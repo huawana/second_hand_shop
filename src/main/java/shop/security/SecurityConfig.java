@@ -54,6 +54,10 @@ public class SecurityConfig {
             "/shop/index", "/shop/index/**",
             "/shop/search", "/shop/checkSession",
             "/shop/productDetail/**",
+            // ---- 【Phase 2】只读分类接口：商品目录属于公开信息，匿名可看 ----
+            // 刻意逐条列出而不用 "/shop/api/**" 通配：将来新增的写接口不会因为
+            // 一个宽通配符被顺手放行 —— 放行范围要「最小可用」，这是安全默认值。
+            "/shop/api/categories", "/shop/api/categories/*",
             // ---- 后台入口 ----
             "/admin/login", "/admin/loginResult"
     };

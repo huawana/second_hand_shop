@@ -14,12 +14,13 @@
 | 层次 | 技术 |
 |---|---|
 | 语言 / 构建 | Java 17（源码级别）、Maven |
-| 框架 | Spring Boot 3.3.5、Spring MVC、MyBatis 3.0.4 |
+| 框架 | Spring Boot 3.3.5、Spring MVC、MyBatis-Plus 3.5.9（Phase 2 起取代原生 MyBatis）|
 | 认证授权 | Spring Security 6 + JWT（jjwt 0.12.6，HttpOnly Cookie）、BCrypt、RBAC |
 | 视图 | Thymeleaf、原生 JS（jQuery） |
 | 数据库 | MySQL 8 |
 | 缓存 / 会话存储 | Redis 5（Phase 1 收尾接入：access token 黑名单 + refresh token 存储，db 3 + `shop:` 前缀） |
 | 自研组件 | `oss-spring-boot-starter`（自定义 Starter，自动配置文件存储，本地磁盘 ⇄ 对象存储可切换） |
+| 持久层能力 | MyBatis-Plus：`BaseMapper` 通用 CRUD、分页插件、乐观锁插件（`@Version`）、公共字段自动填充 |
 | 连接池 | HikariCP（Spring Boot 默认；原声明的 Druid 全项目零引用，Phase 1 已移除） |
 | 日志 | SLF4J + Logback（控制台 + 滚动文件 + 错误单独归档） |
 | 校验 | JSR-303 / Hibernate Validator |
@@ -110,7 +111,13 @@ src/main/java/shop/
 │   ├── Result.java                  统一响应体 {code,message,data,success}
 │   ├── ErrorCode.java               业务错误码枚举
 │   ├── BizException.java            业务异常
-│   └── GlobalExceptionHandler.java  全局异常处理 + HTTP 状态码映射
+│   ├── GlobalExceptionHandler.java  全局异常处理 + HTTP 状态码映射
+│   │                                （含 400 参数 / 401 未登录 / 403 无权限 / 404 资源
+│   │                                 / 405 方法不支持 / 500 兜底的语义分派）
+│   ├── config/
+│   │   ├── MybatisPlusConfig        MP 插件：分页 + 乐观锁（含顺序说明）
+│   │   └── AutoFillMetaObjectHandler 公共字段 created_at/updated_at 自动填充
+│   └── service/CategoryService      分类业务层（新代码统一走 Controller→Service→Mapper）
 ├── security/                        认证授权（Phase 1）
 │   ├── SecurityConfig               SecurityFilterChain / BCrypt / URL 规则 / @EnableMethodSecurity
 │   ├── JwtUtil · AccessToken        access token 签发与解析（含 jti）

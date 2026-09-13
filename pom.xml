@@ -30,7 +30,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- 第三方组件版本（不交给 Boot 管理的部分统一在这里收口） -->
-        <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
+        <!-- 【Phase 2】MyBatis-Plus（Boot 3 专用 starter 坐标，不是 mybatis-plus-boot-starter） -->
+        <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
@@ -47,9 +48,25 @@
 
         <!-- ==================== 持久层 ==================== -->
         <dependency>
-            <groupId>org.mybatis.spring.boot</groupId>
-            <artifactId>mybatis-spring-boot-starter</artifactId>
-            <version>${mybatis-spring-boot.version}</version>
+            <!-- 【Phase 2】MyBatis-Plus 取代原生 mybatis-spring-boot-starter。
+                 MP 是 MyBatis 的超集：既有 XML Mapper 与接口方法一行都不用改，
+                 但多出 BaseMapper 通用 CRUD、分页插件、乐观锁插件、字段自动填充。
+                 注意坐标：Boot 3 必须用 mybatis-plus-spring-boot3-starter；
+                 用 mybatis-plus-boot-starter 会因 mybatis-spring 版本不匹配而启动失败。
+                 两者不能同时存在（会有两个 SqlSessionFactory 配置打架），所以是「替换」而非「叠加」。 -->
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <dependency>
+            <!-- 注意这个坑：MyBatis-Plus 3.5.9 起，依赖 JSqlParser 的功能（首当其冲就是分页插件
+                 PaginationInnerInterceptor）被从核心包里拆了出来。只引 starter 时，
+                 编译期会报「找不到符号 PaginationInnerInterceptor」——很容易误以为是自己写错了 import。
+                 拆包的原因是 JSqlParser 体积不小，不写分页/多表联查的项目不必强依赖它。
+                 分页是本项目的刚需，所以显式引入。 -->
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+            <version>${mybatis-plus.version}</version>
         </dependency>
         <dependency>
             <!-- 注意坐标变了：Boot 2.x 时代是 mysql:mysql-connector-java（已废弃），
